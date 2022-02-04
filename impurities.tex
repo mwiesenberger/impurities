@@ -12,100 +12,63 @@
 \maketitle
 
 \begin{abstract}
-  This is a program for 2d isothermal blob simulations used in References~\cite{Wiesenberger2014,Kube2016,Wiesenberger2017a}.
+  This is a program for 2d isothermal blob simulations with multiple ion species
 \end{abstract}
 
 \section{Equations}
 Currently we implemented $5$ slightly different sets of equations. $n$ is the electron density, $N$ is the ion gyrocentre density and $\rho$
 the vorticity density. $\phi$ is the electric potential. We
 use Cartesian coordinates $x$, $y$.
-\subsection{Models}
+\subsection{Model}
 
-"local"
-\begin{subequations}
-\begin{align}
- -\nabla^2 \phi =  \Gamma_1 N -n, \quad
-\psi = \Gamma_1 \phi \quad \Gamma_1 = ( 1- 0.5\tau\nabla^2)^{-1} \\
- \frac{\partial n}{\partial t}     = 
-    \{ n, \phi\} 
-  + \kappa \frac{\partial \phi}{\partial y} 
-  -\kappa \frac{\partial n}{\partial y}
-  + \nu \nabla^2 n  \\
-  \frac{\partial N}{\partial t} =
-  \{ N, \psi\} 
-  + \kappa \frac{\partial \psi}{\partial y} 
-  + \tau \kappa\frac{\partial N}{\partial y} +\nu\nabla^2N
-\end{align}
-\end{subequations}
+The resulting dimensionless equations for the evolution of the gyro-center
+densities $n_s({\bf x},t)$ for each species are:
 
-"global"
-\begin{subequations}
-\begin{align}
-B(x)^{-1} = \kappa x +1-\kappa X\quad \Gamma_1 = ( 1- 0.5\tau\nabla^2)^{-1}\\
- -\nabla\cdot \left(\frac{N}{B^2} \nabla_\perp \phi\right) = \Gamma_1 N-n, \quad
- \text{Boussinesq:}\quad -\nabla_\perp^2 \phi = \frac{B^2}{N} (\Gamma_1 N -n) \\
-\psi = \Gamma_1 \phi - \frac{1}{2} \frac{(\nabla\phi)^2}{B^2}\\
- \frac{\partial n}{\partial t}     = 
-    \frac{1}{B}\{ n, \phi\} 
-  + \kappa n\frac{\partial \phi}{\partial y} 
-  -\kappa \frac{\partial n}{\partial y}
-  + \nu \nabla_\perp^2 n  \\
-  \frac{\partial N}{\partial t} =
-  \frac{1}{B}\{ N, \psi\} 
-  + \kappa N\frac{\partial \psi}{\partial y} 
-  + \tau \kappa\frac{\partial N}{\partial y} +\nu\nabla_\perp^2N
-\end{align}
-\end{subequations}
+\begin{equation}
+    \partial_t n_s   + \frac{1}{B} \left \{ \psi_s, n_s \right \}
+  =  n_s \kappa \partial_y \psi_s
+  + \tau_s \kappa \partial_y n_s
+  -\nu \nabla_{\perp}^4 n_s. \label{eq:density}
+\end{equation}
+The electric plasma potential $\phi({\bf x},t)$ appears in the full-f
+gyrofluid potential
+\begin{equation}
+    \psi_s  =  \Gamma_s \phi - \frac{1}{2} \mu_s \left(
+    \frac{\nabla_{\perp} \phi}{B} \right)^{2}
+\end{equation}
+The electric potential $\phi$ is determined through the quasi-neutral non-linear
+polarization equation in full-f long wavelength form:
 
-"gravity local"
-\begin{subequations}
-\begin{align}
- \nabla^2 \phi = \rho \\
- \frac{\partial n}{\partial t} = \{ n, \phi\} + \nu \nabla^2 n  \\
-  \frac{\partial \rho}{\partial t} = \{ \rho, \phi\} - \eta \rho - \frac{\partial n}{\partial y} + \nu \nabla^2 \rho 
-\end{align}
-\end{subequations}
+\begin{equation}
+  \sum_s \left[  \nabla \cdot \left( \frac{\mu_s n_s}{Z_s B^2}
+    \nabla_{\perp} \phi \right)  \right] =  - \sum_s \left[ Z_s \Gamma_s n_s  \right]
+  \label{eq:polarization}
+\end{equation}
 
-
-"gravity global"
-\begin{subequations}
-\begin{align}
- \nabla \cdot(n \nabla \phi) = \rho \quad\text{ Boussinesq: }\quad \nabla^2 \phi = \rho/n \\
- \frac{\partial n}{\partial t} = \{ n, \phi\} +  \nu \nabla^2 n  \\
-  \frac{\partial \rho}{\partial t} = \{ \rho, \phi\} + \{n, \frac{1}{2} \nabla\phi^2\} - \eta \rho - \frac{\partial n}{\partial y} +\nu\nabla^2\rho 
-\end{align}
-\end{subequations}
-
-"drift global"
-\begin{subequations}
-\begin{align}
-B(x)^{-1} = \kappa x +1-\kappa X\\
- \nabla \cdot \left(\frac{n}{B^2} \nabla \phi\right) = \rho \quad
- \text{Boussinesq:}\quad \nabla^2\phi = \rho \frac{B^2}{n} \quad
-\psi = \frac{1}{2} \frac{(\nabla\phi)^2}{B^2}\\
- \frac{\partial n}{\partial t}     = 
-    \frac{1}{B}\{ n, \phi\} 
-  + \kappa n\frac{\partial \phi}{\partial y} 
-  + \nu \nabla^2 n  \\
-  \frac{\partial \rho}{\partial t} =
-  \frac{1}{B}\{ \rho, \phi\} 
-  + \frac{1}{B}\{n, \psi\}
-  + \kappa \rho\frac{\partial \phi}{\partial y} 
-  + \kappa n\frac{\partial \psi}{\partial y}
-  - \kappa\frac{\partial n}{\partial y} +\nu\nabla^2\rho 
-\end{align}
-\end{subequations}
-
+For a non-localized impurity species, which features a constant static
+background density $n_{z0}$ and contributes to the overall plasma quasi
+neutrality through the equality $Z_i e n_{i0} + Z_j e n_{0z} - e n_{e0}$ = 0,
+the polarization equation can also be expressed by defining the density ratios
+$a_s = Z_s n_{s0} / n_{e0}$. Then ${\bar \epsilon_s} = \sum_s a_s \mu_s n_s / B^2$,
+and $Q =  - \sum_s [ a_s \Gamma_s n_s ]$.
+Both, the general (localized) and the background impurity forms, will be used
+in the following sections.
 
 \subsection{Initialization}
-Initialization of $n$ is a Gaussian 
+
+\subsubsection{Seeded blob on constant background}
+We here assume one main ion and one impurity species.
+We assume constant background densities $a_j < a_i$ for all species and initialize a blob
+with same relative impurity concentration.
+
+Initialization of $n$ is a Gaussian
 \begin{align}
     n(x,y) = 1 + A\exp\left( -\frac{(x-X)^2 + (y-Y)^2}{2\sigma^2}\right)
     \label{}
 \end{align}
 where $X = p_x l_x$ and $Y=p_yl_y$ are the initial centre of mass position coordinates, $A$ is the amplitude and $\sigma$ the
 radius of the blob.
-We initialize 
+We initialize
 \begin{align}
     N = \Gamma_1^{-1} n \quad \phi = 0 \\
     \rho = \phi = 0
