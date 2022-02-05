@@ -3,259 +3,267 @@
 #include "dg/algorithm.h"
 #include "parameters.h"
 
-namespace dg
+namespace impurities
 {
-template<class Geometry, class Matrix, class container>
-struct Diffusion
+
+template< class Geometry, class Matrix, class Container >
+struct Equations
 {
-    Diffusion( const Geometry& g, imp::Parameters p):
-        p(p),
-        temp( dg::evaluate(dg::zero, g)),
-        LaplacianM_perp ( g, g.bcx(), g.bcy(),  dg::centered)
-    {
+    using value_type = dg::get_value_type<Container>;
+
+    Equations( const Geometry& g, Parameters p);
+
+    const Container& potential(std::string name ) const { return phi.at(name);}
+
+    Helmholtz<Geometry, Matrix, Container>& gamma_inv(std::string name) {
+        return m_multi_helm.at(name)[0];
     }
-    void operator()(double t, const std::vector<container>& x, std::vector<container>& y)
-    {
-        /* x[0] := N_e - 1
-           x[1] := N_i - 1
-           x[2] := N_j - 1
-
-        */
-        dg::blas1::axpby( 0., x, 0., y);
-        for( unsigned i=0; i<x.size(); i++)
-        {
-            //not linear any more (cannot be written as y = Ax)
-            dg::blas2::gemv( LaplacianM_perp, x[i], temp);
-            dg::blas2::gemv( LaplacianM_perp, temp, y[i]);
-            dg::blas1::scal( y[i], -p.nu);  //  nu_perp lapl_RZ (lapl_RZ N) 
-        }
-
-
+    const std::function<void( const Container&, Container&)>& gamma(std::string
+            name) {return m_inv_helm.at(name);
     }
-    dg::Elliptic<Geometry, Matrix, container>& laplacianM() {return LaplacianM_perp;}
-    const container& weights(){return LaplacianM_perp.weights();}
-    const container& precond(){return LaplacianM_perp.precond();}
-  private:
-    const imp::Parameters p;
-    container temp;
-    dg::Elliptic<Geometry, Matrix, container> LaplacianM_perp;
-};
-
-template< class Geometry, class Matrix, class container >
-struct ToeflI
-{
-    using value_type = dg::get_value_type<container>;
-
-    /**
-     * @brief Construct a ToeflI solver object
-     *
-     * @param g The grid on which to operate
-     * @param p the parameters
-     */
-    ToeflI( const Geometry& g, imp::Parameters p);
+    const Container& uE2() const {return m_UE2;}
+    const Container& real_n( std::string name) const{
+        return m_real_n.at(name);
+    }
 
 
-    /**
-     * @brief Returns phi and psi that belong to the last y in operator()
-     *
-     * In a multistep scheme this belongs to the point HEAD-1
-     * @return phi[0] is the electron and phi[1] the generalized ion potential
-     */
-    const std::vector<container>& potential( ) const { return phi;}
-
-    /**
-     * @brief Return the Gamma operator used by this object
-     *
-     * @return Gamma operator
-     */
-    Helmholtz<Geometry, Matrix, container>& gamma() {return gamma1;}
-
-    /**
-     * @brief Compute the right-hand side of the toefl equations
-     *
-     * @param y input vector
-     * @param yp the rhs yp = f(y)
-     */
-    void operator()(double t, const std::vector<container>& y, std::vector<container>& yp);
-
-    /**
-     * @brief Return the mass of the last field in operator() in a global computation
-     *
-     * @return int exp(y[0]) dA
-     */
-    double mass( ) {return mass_;}
-    /**
-     * @brief Return the last integrated mass diffusion of operator() in a global computation
-     *
-     * @return int \nu \Delta (exp(y[0])-1)
-     */
-    double mass_diffusion( ) {return diff_;}
-    /**
-     * @brief Return the energy of the last field in operator() in a global computation
-     *
-     * @return integrated total energy in {ne, ni}
-     */
-    double energy( ) {return energy_;}
-    /**
-     * @brief Return the integrated energy diffusion of the last field in operator() in a global computation
-     *
-     * @return integrated total energy diffusion
-     */
-    double energy_diffusion( ){ return ediff_;}
-    const container& polarization( double t, const std::vector<container>& y);
+    void operator()(double t, const std::map<std::string, Container>& y, std::map<std::string, Container>& yp);
 
 private:
-    //extrapolates and solves for phi[1], then adds square velocity ( omega)
-    const container& compute_psi( const container& potential, int idx);
-//    const container& polarization( const std::vector<container>& y);
+    void compute_phi( const std::map<std::string, Container>& y);
+    void compute_psi( const Container& potential);
 
-    container chi, omega;
-    const container binv; //magnetic field
+    Container m_binv; //magnetic field
 
-    std::vector<container> phi, dyphi, ype;
-    std::vector<container> dyy, lny, lapy;
-    std::vector<container> gamma_n;
+    Container m_chi, m_omega;
+    Container m_tilden, m_temp;
+    Container m_phi;
+    Container m_dyn, m_dxpsi, m_dypsi;
+    // output relevant quantities
+    Container m_uE2;
+    std::map<std::string,Container> m_psi, m_real_n;
+    std::vector<Container> m_multi_chi;
 
-    //matrices and solvers
-    Helmholtz< Geometry, Matrix, container > gamma1;
-    ArakawaX< Geometry, Matrix, container> arakawa; 
-    dg::Elliptic< Geometry, Matrix, container > pol, laplaceM; 
-    dg::PCG<container> invert_pol, invert_invgamma;
-    dg::Extrapolation<container> extra_pol, extra_invgamma;
+    dg::NestedGrids<Geometry, Matrix, Container> m_nested_grids;
+    std::vector<Container> m_multi_weights;
+    std::vector<dg::PCG<Container> > m_multi_pcg;
 
-    const container w2d;
+    std::map<std::string, std::vector<dg::Helmholtz<Geometry, Matrix,
+        Container>>> m_multi_helm;
+    std::vector<dg::Elliptic< Geometry, Matrix, Container >> m_multi_pol;
 
-    double mass_, energy_, diff_, ediff_;
+    std::map<std::function <void( const Container&, Container&)>> m_inv_helm;
+    std::function< void( const Container&, Container&)> m_inv_pol;
 
-    imp::Parameters p;
+    // initial guess
+    dg::Extrapolation<Container> m_extra_phi;
+    std::map<std::string, dg::Extrapolation> m_extra_n, m_extra_psi;
+
+    // derivatives for each species
+    std::map<std::string, dg::Elliptic< Geometry, Matrix, Container >> m_laplacianM;
+    std::map<std::string, dg::Advection< Geometry, Matrix, Container>> m_adv;
+    std::string, std::array<Matrix,2> m_centered;
+    Parameters m_p;
 };
 
-template< class Geometry, class Matrix, class container>
-ToeflI< Geometry, Matrix, container>::ToeflI( const Geometry& grid, imp::Parameters p) :
-    chi( evaluate( dg::zero, grid )), omega(chi),
-    binv( evaluate( LinearX( p.kappa, 1.), grid)),
-    phi( 3, chi), dyphi( phi), ype(phi),
-    dyy( 3, chi), lny(dyy), lapy( dyy),
-    gamma_n( 2, chi),
-    gamma1(  grid, -0.5*p.tau[1]),
-    arakawa( grid),
-    pol(      grid, centered),
-    laplaceM( grid, centered),
-    invert_pol(      omega, omega.size()),
-    invert_invgamma( omega, omega.size()),
-    extra_pol( 2, omega),
-    w2d( create::volume(grid)), p(p)
+template< class Geometry, class Matrix, class Container>
+Equations< Geometry, Matrix, Container>::Equations( const Geometry& grid, Parameters p) :
+    m_binv( evaluate( LinearX( p.kappa, 1.), grid)),
+    m_chi( evaluate( dg::zero, grid )), m_omega(chi), m_UE2(chi),
+    m_tilden(m_chi), m_temp(m_chi),
+    m_phi(m_chi),
+    m_dyn(m_chi), m_dxpsi(m_chi), m_dypsi(m_chi),
+    m_extra_phi( 2, m_omega)
+    m_p(p)
+{
+    m_nested_grids.construct( grid, m_p.num_stages);
+    m_multi_chi = m_nested_girds.project(m_chi);
+    for( unsigned u=0; u<m_p.num_stages; u++)
     {
+        m_multi_weights[u] = dg::create::weights( m_nested_grids.grid(u));
+        m_multi_pcg[u].construct( m_multi_chi[u], 10000);
     }
+    for( auto s : m_p.species)
+    {
+        m_psi[s] = m_chi;
+        m_real_n[s] = m_chi;
+        m_extra_n[s] = m_extra_psi[s] = m_extra_phi;
+        m_laplacianM[s].construct( grid, m_p.bcx[s], m_p.bcy[s], m_p.diff_dir);
+        m_adv[s].construct( grid,  m_p.bcx[s], m_p.bcy[s]);
+        // construct inversion for Gamma operators
+        std::vector<std::function<void( const Container&, Container&)> > multi_inv_helm;
+        for( unsigned u=0; u<m_p.num_stages; u++)
+        {
+            m_multi_helm[s].push_back( m_nested_grids.grid(u), m_p.bcx[s],
+                    m_p.bcy[s], -0.5*m_p.tau[s]*m_p.mu[s], m_p.pol_dir);
+            multi_inv_helm[u] = [
+                    &op = m_multi_helm[s][u],
+                    &pcg = m_multi_pcg[u],
+                    &weights = m_multi_weights[u],
+                    eps = m_p.eps_gamma,
+                    u = u, s = s
+                ] (const auto& y, auto& x)
+                {
+#ifdef MPI_VERSION
+                    int rank;
+                    MPI_Comm_rank( MPI_COMM_WORLD, &rank);
+#endif
+                    unsigned number = 0;
+                    dg::Timer t;
+                    t.tic();
+                    if( u == 0)
+                        number = pcg.solve( op, x, y, 1., weights, eps, 1., 1);
+                    else
+                        number = pcg.solve( op, x, y, 1., weights, eps, 1., 10);
+                    t.toc();
+                    DG_RANK0 std::cout << "# Inverting Helmholtz for species "<<s<<" took "<<number << " iterations in "<<t.diff()<<"s\n";
+                };
+        }
+        if( m_p.mu[s] == 0 || m_p.tau[s] == 0)
+            m_inv_helm[s] = [](const auto& y, auto& x){ dg::blas1::copy( y, x);}
+        else
+            m_inv_helm[s] = [&, multi_inv = std::move(multi_inv_helm)]
+                ( const auto& y, auto& x)
+            {
+                dg::nested_iterations( m_helm, x, y, multi_inv, nested_grids);
+            }
+    }
+    std::string s = "potential";
+    m_centered = {dg::create::dx( grid, m_p.bcx[s]), dg::create::dy(
+                grid, m_p.bcy[s])};
+    std::vector<std::function<void( const Container&, Container&)> > multi_inv_pol;
+    for( unsigned u=0; u<m_p.num_stages; u++)
+    {
+        m_multi_pol.construct( m_nested_grids.grid(u), m_p.bcx[s], m_p.bcy[s],
+                m_p.pol_dir);
+        multi_inv_pol[u] = [
+                &op = m_multi_pol[u],
+                &pcg = m_multi_pcg[u],
+                &weights = m_multi_weights[u],
+                &eps = m_p.eps_pol[u],
+                u = u
+            ] (const auto& y, auto& x)
+            {
+#ifdef MPI_VERSION
+                int rank;
+                MPI_Comm_rank( MPI_COMM_WORLD, &rank);
+#endif
+                unsigned number = 0;
+                dg::Timer t;
+                t.tic();
+                if( u == 0)
+                    number = pcg.solve( op, x, y, 1., weights, eps, 1., 1);
+                else
+                    number = pcg.solve( op, x, y, 1., weights, eps, 1., 10);
+                t.toc();
+                DG_RANK0 std::cout << "# Inverting Polarisation equation took "<<number << " iterations in "<<t.diff()<<"s\n";
+            };
+
+    }
+    m_inv_pol = [ &, multi_inv = std::move(multi_inv_pol) ]
+        (const auto& y, auto& x)
+    {
+        dg::nested_iterations( m_multi_pol, x, y, multi_inv, m_nested_grids);
+    }
+
+}
 
 
 //idx is impurity species one or two
-template< class G, class M, class container>
-const container& ToeflI<G, M, container>::compute_psi( const container& potential, int idx)
+template< class G, class M, class Container>
+void Equations<G, M, Container>::compute_psi( double t, const Container& potential)
 {
-    gamma1.alpha() = -0.5*p.tau[idx]*p.mu[idx];
-
-    invert_invgamma.solve( gamma1, phi[idx], potential, gamma1.precond(),
-            gamma1.weights(), p.eps_gamma);
-
-    pol.variation(binv,potential, omega); // u_E^2
-
-    dg::blas1::axpby( 1., phi[idx], -0.5*p.mu[idx], omega, phi[idx]);   //psi  Gamma phi - 0.5 u_E^2
-    return phi[idx];
-}
-
-
-template<class G, class Matrix, class container>
-const container& ToeflI<G, Matrix, container>::polarization( double t, const std::vector<container>& y)
-{
-    //\chi = p.ai \p.mui n_i + p.as \p.mus n_s
-    blas1::axpby( p.a[1]*p.mu[1], y[1], 0., chi); 
-    blas1::axpby( p.a[2]*p.mu[2], y[2], 1., chi);
-    dg::blas1::plus( chi, p.a[1]*p.mu[1]+p.a[2]*p.mu[2]); 
-    dg::blas1::pointwiseDot( chi, binv, chi);
-    dg::blas1::pointwiseDot( chi, binv, chi);       //(\p.mui n_i ) /B^2
-    pol.set_chi( chi);                              //set chi of polarisation: nablp.aperp (chi nablp.aperp )
-
-    gamma1.alpha() = -0.5*p.tau[1]*p.mu[1];
-    invert_invgamma.solve( gamma1, gamma_n[0], y[1], gamma1.precond(),
-            gamma1.weights(), p.eps_gamma);
-    gamma1.alpha() = -0.5*p.tau[2]*p.mu[2];
-    invert_invgamma.solve( gamma1, gamma_n[1], y[2], gamma1.precond(),
-            gamma1.weights(), p.eps_gamma );
-
-    dg::blas1::axpby( -1., y[0], 0., chi);
-    dg::blas1::axpby( +p.a[1], gamma_n[0], 1., chi);
-    dg::blas1::axpby( +p.a[2], gamma_n[1], 1., chi);
-
-    extra_pol.extrapolate( t, phi[0]);
-    unsigned number = invert_pol.solve( pol, phi[0], chi, pol.precond(),
-            pol.weights(), p.eps_pol);
-    //p.ajGamma n_j + p.aiGamma n_i -ne = -nabla chi nabla phi
-    if(  number == invert_pol.get_max())
-        throw dg::Fail( p.eps_pol);
-    extra_pol.update( t, phi[0]);
-    return phi[0];
-}
-
-template< class G, class M, class container>
-void ToeflI< G, M, container>::operator()(double t, const std::vector<container>& y, std::vector<container>& yp)
-{
-    //y[0] = N_e - 1
-    //y[1] = N_i - 1
-    //y[2] = N_j - 1
-    //
-    assert( y.size() == 3);
-    assert( y.size() == yp.size());
-
-    phi[0] = polarization(t, y);
-    phi[1] = compute_psi( phi[0], 1);
-    phi[2] = compute_psi( phi[0], 2);
-    for( unsigned i=0; i<y.size(); i++)
+    m_multi_pol[0].variation(binv, potential, m_UE2); // u_E^2
+    for( auto s : m_p.species)
     {
-        dg::blas1::transform( y[i], ype[i], dg::PLUS<>(+1)); 
-        dg::blas1::transform( ype[i], lny[i], dg::LN<double>()); 
-        dg::blas2::symv( laplaceM, y[i], chi);
-        dg::blas2::symv( laplaceM, chi, lapy[i]);
-    }
+        m_extra_psi[s].extrapolate( t, m_psi[s]);
+        dg::apply( m_inv_helm[s], potential, m_psi[s]);
+        m_extra_psi[s].update( t, m_psi[s]);
 
-    //update energetics, 2% of total time
-        mass_ = blas2::dot( 1., w2d, y[0] ); //take real ion density which is electron density!!
-        double Se = blas2::dot( ype[0], w2d, lny[0]);
-        double Si = p.a[1]*p.tau[1]*blas2::dot( ype[1], w2d, lny[1]);
-        double Sz = p.a[2]*p.tau[2]*blas2::dot( ype[2], w2d, lny[2]);
-        double Uphii = 0.5*p.a[1]*p.mu[1]*blas2::dot( ype[1], w2d, omega); 
-        double Uphiz = 0.5*p.a[2]*p.mu[2]*blas2::dot( ype[2], w2d, omega); 
-        energy_ = Se + Si + Sz + Uphii + Uphiz;
-
-        diff_ = -p.nu*blas2::dot( 1., w2d, lapy[0]);
-        double Gi[3];
-        Gi[0] = - blas2::dot( 1., w2d, lapy[0]) - blas2::dot( lapy[0], w2d, lny[0]); // minus 
-        for( unsigned i=1; i<3; i++)
-            Gi[i] = - p.tau[i]*(blas2::dot( 1., w2d, lapy[i]) + blas2::dot( lapy[i], w2d, lny[i])); // minus 
-        double Gphi[3];
-        for( unsigned i=0; i<3; i++)
-            Gphi[i] = -blas2::dot( phi[i], w2d, lapy[i]);
-        //std::cout << "ge "<<Ge<<" gi "<<Gi<<" gphi "<<Gphi<<" gpsi "<<Gpsi<<"\n";
-        ediff_ = p.nu*( Gi[0] - Gphi[0] + p.a[1]*(Gi[1] + Gphi[1]) + p.a[2]*( Gi[2] + Gphi[2]));
-
-    for( unsigned i=0; i<y.size(); i++)
-    {
-        arakawa( y[i], phi[i], yp[i]);
-        blas1::pointwiseDot( binv, yp[i], yp[i]);
-    }
-
-    //compute derivatives
-    for( unsigned i=0; i<y.size(); i++)
-    {
-        blas2::gemv( arakawa.dy(), y[i], dyy[i]);
-        blas2::gemv( arakawa.dy(), phi[i], dyphi[i]);
-
-        blas1::pointwiseDot( dyphi[i], ype[i], dyphi[i]);
-        blas1::axpby( p.kappa, dyphi[i], 1., yp[i]);
-
-        blas1::axpby( p.tau[i]*p.kappa, dyy[i], 1., yp[i]);
+        dg::blas1::axpby( 1., m_psi[s], -0.5*p.mu[s], m_UE2, m_psi[s]);   //psi  Gamma phi - 0.5 u_E^2
     }
 }
 
-}//namespace dg
+
+template<class G, class Matrix, class Container>
+void Equations<G, Matrix, Container>::compute_phi( double t, const std::vector<Container>& y)
+{
+    // Compute chi
+    dg::blas1::copy( m_p.epsilon_D, m_chi);
+    dg::blas1::pointwiseDot( m_binv, m_binv, m_temp);
+    for( auto s : m_p.species)
+        dg::blas1::pointwiseDot( m_p.a[s]*m_p.mu[s], y[s], m_temp, 1., m_chi);
+
+    // update multi_pol object
+    m_nested_grids.project( m_chi, m_multi_chi);
+    for( unsigned u=0; u<m_p.num_stages; u++)
+        m_multi_pol[u].set_chi( m_multi_chi[u]);
+
+    //Compute rhs: \sum_s a_s Gamma_s N_s
+    dg::blas1::copy( 0., m_omega);
+    for( auto s : m_p.species)
+    {
+        // Solve Gamma N
+        m_extra_n[s].extrapolate( t, m_real_n[s]);
+        dg::apply( m_inv_helm[s], y[s], m_real_n[s]);
+        m_extra_n[s].update( t, m_real_n[s]);
+        dg::blas1::axpby( m_p.a[s], m_real_n[s], 1., m_omega);
+    }
+
+    // Solve for potential
+    m_extra_phi.extrapolate( t, m_phi);
+    dg::apply( m_inv_pol, m_omega, m_phi);
+    extra_phi.update( t, m_phi);
+
+    // Compute real_n (for output)
+    // Technically, we only need it every output step but it is more convenient here
+    for( auto s : m_p.species)
+    {
+        dg::blas1::pointwiseDot( m_p.a[s]*m_p.mu[s], y[s], m_temp, 0., m_chi);
+        m_multi_pol[0].set_chi( m_chi);
+        dg::apply( m_multi_pol[0], y[s], m_omega);
+        // m_multi_pol is negative !
+        dg::blas1::axpby( -1., m_omega, 1., m_real_n[s]);
+    }
+
+}
+
+template< class G, class M, class Container>
+void Equations< G, M, Container>::operator()(double t, const std::map<std::string, Container>& y, std::map<std::string, Container>& yp)
+{
+    // y[s] == n_s
+
+    // compute m_phi
+    compute_phi( t, y);
+    // compute all m_psi
+    compute_psi( t, m_phi);
+
+    for( auto s : m_p.species)
+    {
+        // add advection term
+        dg::blas2::symv( m_centered[0], m_psi[s], m_dxpsi);
+        dg::blas2::symv( m_centered[1], m_psi[s], m_dypsi);
+
+        // we need to subtract 1 because dg expects 0 boundary conditions
+        if( m_p.bcx[s] == dg::DIR || m_p.bcy[s] == dg::DIR)
+            dg::blas1::axpby( 1., y[s], -1., 1., m_tilden);
+        else
+            dg::blas1::copy( y[s], m_tilden);
+
+        // ExB + Curv advection with updwind scheme
+        dg::blas1::pointwiseDot( -1., m_binv, m_dypsi, m_v[0]);
+        dg::blas1::pointwiseDot( +1., m_binv, m_dxpsi, m_v[1]);
+        dg::blas1::plus( m_v[1], -m_p.tau[s]*m_p.kappa);
+        m_adv[s].upwind( -1., m_v[0], m_v[1], m_tilden, 0., yp[s]);
+
+        // Div ExB velocity
+        dg::blas1::pointwiseDot( m_p.kappa, y[s], m_dypsi, 1., yp[s]);
+
+        // Add diffusion
+        dg::blas2::gemv( m_laplacianM[s], m_tilden, m_temp);
+        dg::blas2::gemv( -m_p.nu_perp[s], m_laplacianM[s], m_temp, 1., yp[s]);
+    }
+}
+
+}//namespace impurities
 

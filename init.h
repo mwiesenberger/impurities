@@ -1,88 +1,104 @@
 #pragma once
 
-namespace imp
+namespace impurities
 {
 
-std::vector<dg::x::DVec> initial_conditions(
+std::map<std::string, dg::x::DVec> initial_conditions(
     const dg::x::CartesianGrid2d& grid,
-    dg::file::WrappedJsonValue init)
+    Equations<dg::x::CartesianGrid2d, dg::x::DMatrix, dg::x::DVec>& eq,
+    const Parameters& p,
+    const dg::file::WrappedJsonValue& js)
 {
-    std::vector<dg::x::HVec> y0(3, dg::x::HVec( grid.size()) );
-    std::string initial = init.get("type", "lamb").asString();
-    double amp, sigma, posX, posY;
-        vorticity = js["vorticity"].asDouble();
-        mode = js["mode"].asUInt();
-        wall_pos = js["wall_pos"].asDouble();
-        wall_amp = js["wall_amp"].asDouble();
-        wall_sigma = js["wall_sigma"].asDouble();
-        amp = js["amplitude"].asDouble();
-        sigma = js["sigma"].asDouble();
-        posX = js["posX"].asDouble();
-        posY = js["posY"].asDouble();
-    if( initial == "zero")
+    std::map<std::string, dg::x::DVec> y0;
+    bool zero_pot = false;
+    std::string zero_pot_species = "electrons";
+    for( unsigned u=0; u<p.num_species; u++)
     {
-        omega = dg::evaluate( dg::zero, grid);
-    }
-
-    if( "gaussian" == initial)
-    {
-        if( p.vorticity == 0)
+        std::string s = p.species[u];
+        dg::file::WrappedJsonValue init = js["species"][u]["init"];
+        std::string type = init.get("type", "zero").asString();
+        if( "zero" == type)
         {
-            gamma.alpha() = -0.5*p.tau[1];
-            y0[0] = dg::evaluate( gaussian, grid);
-            dg::blas2::symv( gamma, y0[0], y0[1]); // n_e = \Gamma_i n_i -> n_i = ( 1+alphaDelta) n_e' + 1 
+            y0[s] = dg::evaluate( dg::one, grid);
+        }
+        else if( "gaussian" == type)
+        {
+            double amp, sigma, posX, posY;
+            amp = init["amplitude"].asDouble();
+            sigma = init["sigma"].asDouble();
+            posX = init["posX"].asDouble();
+            posY = init["posY"].asDouble();
+            double X = p.x[0] + posX*(p.x[1]-p.x[0]);
+            double Y = p.y[0] + posY*(p.y[1]-p.y[0]);
 
-            dg::blas1::scal( y0[1], 1./p.a[1]); //n_i ~1./a_i n_e
-            y0[2] = dg::evaluate( dg::zero, grid);
+            dg::Gaussian gaussian( X, Y, sigma, sigma, p.wall_amp);
+            dg::DVec temp = dg::evaluate( gaussian, grid);
+            y0[s] = temp;
+            if( p.mu[s] != 0)
+            {
+                std::string flr = init["flr"].asString();
+                if( "none" == flr)
+                    ;
+                else if( "gamma" == flr)
+                {
+                    dg::apply( eq.gamma(s), temp, y0[s]);
+                }
+                else if( "gamma_inv" == flr)
+                {
+                    dg::apply( eq::gamma_inv(s), temp, y0[s]);
+                }
+            }
+        }
+        else if( "wall" == type)
+        {
+            double wall_pos = js["posX"].asDouble();
+            double wall_amp = js["amplitude"].asDouble();
+            double wall_sigma = js["sigma"].asDouble();
+            double X = p.x[0] + posX*(p.x[1]-p.x[0]);
+            dg::GaussianX wall( X, p.wall_sigma, p.wall_amp);
+            dg::DVec temp = dg::evaluate( wall, grid);
+            y0[s] = temp;
+            if( p.mu[s] != 0)
+            {
+                std::string flr = init["flr"].asString();
+                if( "none" == flr)
+                    ;
+                else if( "gamma" == flr)
+                {
+                    dg::apply( eq.gamma(s), temp, y0[s]);
+                }
+                else if( "gamma_inv" == flr)
+                {
+                    dg::apply( eq::gamma_inv(s), temp, y0[s]);
+                }
+            }
+        }
+        else if( "zero_potential" == type)
+        {
+            if( p.mu[s] != 0)
+                throw dg::Error( dg::Message(_ping_)<<"init type zero_potential only possible for  mu=0! You gave mu = "<<p.mu[s]<<"\n");
+            zero_pot = true;
+            zero_pot_species = s;
         }
         else
-        {
-            y0[1] = y0[0] = dg::evaluate( gaussian, grid);
-            dg::blas1::scal( y0[1], 1/p.a[1]);
-            y0[2] = dg::evaluate( dg::zero, grid);
-        }
-    }
-    if( initial == "wall")
-    {
-        //init wall in y0[2]
-        dg::GaussianX wall( p.wall_pos*grid.lx(), p.wall_sigma, p.wall_amp); 
-        dg::DVec wallv = dg::evaluate( wall, grid);
-        gamma.alpha() = -0.5*p.tau[2]*p.mu[2];
-        dg::blas2::symv( gamma, wallv, y0[2]); 
-        if( p.a[2] != 0.)
-            dg::blas1::scal( y0[2], 1./p.a[2]); //n_z ~1./a_z
+            throw dg::Error( dg::Message(_ping_)<<"init type "<<type" not recognized \n");
 
-        //init blob in y0[1]
-        gamma.alpha() = -0.5*p.tau[1];
-        y0[0] = dg::evaluate( gaussian, grid);
-        dg::blas2::symv( gamma, y0[0], y0[1]); 
-        if( p.a[2] == 1)
-        {
-            std::cerr << "No blob with trace ions possible!\n";
-            return -1;
-        }
-        dg::blas1::scal( y0[1], 1./p.a[1]); //n_i ~1./a_i n_e
 
-        //sum up
-        if( p.a[2] != 0)
-            dg::blas1::axpby( 1., wallv, 1., y0[0]); //add wall to blob in n_e
     }
-    if( init == "blob") 
+    if( zero_pot)
     {
-        gamma.alpha() = -0.5*p.tau[2]*p.mu[2];
-        y0[0] = dg::evaluate( gaussian, grid);
-        dg::blas2::symv( gamma, y0[0], y0[2]); 
-        if( p.a[2] == 0)
+        y0[zero_pot_species] = dg::evaluate( dg::zero, grid);
+        for( auto s : p.species)
         {
-            std::cerr << "No impurity blob with trace impurities possible!\n";
-            return -1;
+            if( s != zero_pot_species)
+            {
+                dg::x::DVec temp = y0[s];
+                dg::apply( eq.gamma(s), y0[s], temp);
+                dg::blas1::axpby( -p.a[s]/p.a[zero_pot_species], temp, 1., y0[zero_pot_species]);
+            }
         }
-        dg::blas1::axpby( 1./p.a[2], y0[2], 0., y0[2]); //n_z ~1./a_z n_e
-        y0[1] = dg::evaluate( dg::zero, grid);
     }
-    throw dg::Error( dg::Message() << "Initial condition "
-                    <<initial<<" not recognized!");
-    return std::vector<dg::x::DVec>>(omega);
+    return y0;
 }
 
 } // namespace imp

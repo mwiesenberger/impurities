@@ -1,35 +1,72 @@
 %%%%%%%%%%%%%%%%%%%%%definitions%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-\input{../common/header.tex}
-\input{../common/newcommands.tex}
+\input{../feltor/src/common/header.tex}
+\input{../feltor/src/common/newcommands.tex}
 \usepackage{minted}
+\newcommand{\ns}{\ensuremath{{n_s} }}
+\newcommand{\physs}{\ensuremath{{N_s} }}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%DOCUMENT%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{document}
 
-\title{The toefl project}
-\author{ M.~Wiesenberger and M.~Held}
+\title{The impurities project}
+\author{ M.~Wiesenberger and M.~Held and E.~Reiter}
 \maketitle
 
 \begin{abstract}
-  This is a program for 2d isothermal blob simulations with multiple ion species
+  This is a program for 2d isothermal blob simulations with an arbitrary number of species
 \end{abstract}
+\tableofcontents
 
-\section{Equations}
-Currently we implemented $5$ slightly different sets of equations. $n$ is the electron density, $N$ is the ion gyrocentre density and $\rho$
-the vorticity density. $\phi$ is the electric potential. We
-use Cartesian coordinates $x$, $y$.
-\subsection{Model}
+\section{Compilation and useage}
+The program impurities.cpp can be compiled three ways with
+\begin{verbatim}
+make <impurities impurities_hpc impurities_mpi> device = <cpu omp gpu>
+\end{verbatim}
+Run with
+\begin{verbatim}
+path/to/impurities/impurities input.json
+path/to/impurities/impurities_hpc input.json output.nc
+echo np_x np_y | mpirun -n np_x*np_y path/to/impurities/impurities_mpi\
+    input.json output.nc
+\end{verbatim}
+All programs write performance informations to std::cout.
+The first is for shared memory systems (CPU/OpenMP/GPU) and opens a terminal window with life simulation results.
+ The
+second is shared memory systems and uses serial netcdf
+to write results to a file.
+For distributed
+memory systems (MPI+CPU/OpenMP/GPU) the program expects the distribution of processes in the
+x and y directions as command line input parameters. Also there serial netcdf is used.
 
-The resulting dimensionless equations for the evolution of the gyro-center
-densities $n_s({\bf x},t)$ for each species are:
+\section{Model}
 
-\begin{equation}
-    \partial_t n_s   + \frac{1}{B} \left \{ \psi_s, n_s \right \}
-  =  n_s \kappa \partial_y \psi_s
-  + \tau_s \kappa \partial_y n_s
-  -\nu \nabla_{\perp}^4 n_s. \label{eq:density}
-\end{equation}
+The dimensionless equations for the evolution of the gyro-center
+densities $\ns({\bf x},t)$ in two-dimensional Cartesian coordinates $x,y$ for each species are:
+
+\begin{align} \label{eq:density}
+    \partial_t \ns  &=  - \frac{1}{B} \left \{ \psi_s, \ns \right \}
+  +  \ns \kappa \partial_y \psi_s
+  + \tau_s \kappa \partial_y \ns
+  -\nu_{s,\perp} \nabla_{\perp}^4 \ns \\
+  &= -(\vec{ v_{E,s}} + \vec{ v_{\kappa,s}} )\cdot \ns  - \ns \nabla\cdot \vec {v_E} -\nu_{s,\perp} \Delta_\perp^2 \ns
+\end{align}
+where the Arakawa bracket represents the advection by the \ExB velocity
+\begin{align}
+    \frac{1}{B} \left \{ \psi_s, \ns \right \} = \vec v_{E,s} \cdot \nabla \ns \\
+v_x = -\frac{1}{B} \partial_y \psi_s \quad v_y = \frac{1}{B}\partial_x \psi_s
+\end{align}
+The magnetic field is given by
+\begin{align}
+    \vec B=  B(x) \hat e_z \quad
+    B^{-1}(x)= 1+\kappa x
+\end{align}
+from which the curvature operators $\vec K = \frac{1}{B^2}\frac{\partial B}{\partial x}\hat e_y = -\partial_x B^{-1}\hat e_y = -\kappa \hat e_y$.
+and
+\begin{align}
+\vec v_{\kappa,s} = \tau \vec K = -\kappa\tau_s \hat e_y
+\end{align}
+
 The electric plasma potential $\phi({\bf x},t)$ appears in the full-f
 gyrofluid potential
 \begin{equation}
@@ -38,199 +75,585 @@ gyrofluid potential
 \end{equation}
 The electric potential $\phi$ is determined through the quasi-neutral non-linear
 polarization equation in full-f long wavelength form:
-
 \begin{equation}
-  \sum_s \left[  \nabla \cdot \left( \frac{\mu_s n_s}{Z_s B^2}
-    \nabla_{\perp} \phi \right)  \right] =  - \sum_s \left[ Z_s \Gamma_s n_s  \right]
+    -\sum_s \left[\nabla \cdot \left(  \left(\eps_D +  \frac{a_s \mu_s \ns}{ B^2}\right)
+    \nabla_{\perp} \phi \right)  \right] =  \sum_s a_s \Gamma_s \ns 
   \label{eq:polarization}
 \end{equation}
-
-For a non-localized impurity species, which features a constant static
-background density $n_{z0}$ and contributes to the overall plasma quasi
-neutrality through the equality $Z_i e n_{i0} + Z_j e n_{0z} - e n_{e0}$ = 0,
-the polarization equation can also be expressed by defining the density ratios
-$a_s = Z_s n_{s0} / n_{e0}$. Then ${\bar \epsilon_s} = \sum_s a_s \mu_s n_s / B^2$,
-and $Q =  - \sum_s [ a_s \Gamma_s n_s ]$.
-Both, the general (localized) and the background impurity forms, will be used
-in the following sections.
-
-\subsection{Initialization}
-
-\subsubsection{Seeded blob on constant background}
-We here assume one main ion and one impurity species.
-We assume constant background densities $a_j < a_i$ for all species and initialize a blob
-with same relative impurity concentration.
-
-Initialization of $n$ is a Gaussian
+where $\eps_D$ is the (optional) Debye parameter (important for electron-positron plasmas)
+and the gyro-averaging operator
 \begin{align}
-    n(x,y) = 1 + A\exp\left( -\frac{(x-X)^2 + (y-Y)^2}{2\sigma^2}\right)
-    \label{}
+    \Gamma_s  =  \left( 1- \frac{1}{2} \tau_s \mu_s \nabla_{\perp}^2 \right)^{-1}
 \end{align}
-where $X = p_x l_x$ and $Y=p_yl_y$ are the initial centre of mass position coordinates, $A$ is the amplitude and $\sigma$ the
-radius of the blob.
-We initialize
+is expressed in Pad\'e approximation.
+We note the physical particle densities
 \begin{align}
-    N = \Gamma_1^{-1} n \quad \phi = 0 \\
-    \rho = \phi = 0
-    \label{}
+    \physs = \Gamma_{1s}\ns + \nabla\cdot\left(\frac{ \mu_s \ns}{ B^2}
+    \nabla_{\perp} \phi \right)
 \end{align}
-\subsection{Diagnostics}
+We have
 \begin{align}
-    M(t) = \int n-1 \\
-    \Lambda_n = \nu \int \Delta n  \\
-    ...
-    \label{}
+    a_s = \frac{Z_s n_{s0}}{n_{e0}}  \quad \mu_s = \frac{m_s}{Z_s m_i} \quad \tau_s = \frac{T_s}{Z_s T_e}
 \end{align}
-\section{Numerical methods}
-discontinuous Galerkin on structured grid
-\rowcolors{2}{gray!25}{white} %%% Use this line in front of longtable
-\begin{longtable}{ll>{\RaggedRight}p{7cm}}
-\toprule
-\rowcolor{gray!50}\textbf{Term} &  \textbf{Method} & \textbf{Description}  \\ \midrule
-coordinate system & Cartesian 2D & equidistant discretization of $[0,l_x] \times [0,l_y]$, equal number of Gaussian nodes in x and y \\
-matrix inversions & conjugate gradient & Use previous two solutions to extrapolate initial guess and $1/\chi$ as preconditioner \\
-\ExB advection & Arakawa & s.a. \cite{Einkemmer2014} \\
-curvature terms & direct & flux conserving \\
-time &  Karniadakis multistep & $3rd$ order explicit, diffusion $2nd$ order implicit \\
-\bottomrule
-\end{longtable}
 
-\section{Compilation and useage}
-There are two programs toeflR.cu and toefl\_hpc.cu . Compilation with
-\begin{verbatim}
-make <toeflR toefl_hpc toefl_mpi> device = <omp gpu>
-\end{verbatim}
-Run with
-\begin{verbatim}
-path/to/feltor/src/toefl/toeflR input.json
-path/to/feltor/src/toefl/toefl_hpc input.json output.nc
-echo np_x np_y | mpirun -n np_x*np_y path/to/feltor/src/toefl/toefl_mpi\
-    input.json output.nc
-\end{verbatim}
-All programs write performance informations to std::cout.
-The first is for shared memory systems (OpenMP/GPU) and opens a terminal window with life simulation results.
- The
-second can be compiled for both shared and distributed memory systems and uses serial netcdf in both cases
-to write results to a file.
-For distributed
-memory systems (MPI+OpenMP/GPU) the program expects the distribution of processes in the
-x and y directions as command line input parameters.
+The overall plasma quasi-neutrality reads
+\begin{align}
+    \sum_s a_s = 0
+\end{align}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Invariants}
+The mass density and diffusions are
+\begin{align}
+    \mathcal M &= \ns \\
+    \vec j_{n,s} &= \ns \vec v_E + \vec v_\kappa \\
+     \Lambda_\ns &= -\nu_\perp \Delta_\perp^2 \ns
+\end{align}
 
-\subsection{Input file structure}
+The inherent energy density of our system is:
+\begin{align}
+ \mathcal{E} := &
+ \sum_s a_s \tau_s \ns \ln{(\ns)} + \frac{1}{2} a_s \mu_s \ns u_E^2
+\end{align}
+The energy current density and diffusion are
+\begin{align}
+  \vec j_{\mathcal E} =& \sum_s a_s\left[
+  \left(\tau_s \ln \ns + \psi_s \right)\ns\left(
+  \vec u_E + u_\kappa \right) \right]
+  , \\
+    \Lambda_\mathcal{E} :=  &+ \left( \tau_s ( 1+\ln \ns) + \psi_s\right)(-\nu_\perp \Delta_\perp^2 \ns)
+    \label{eq:energy_diffusion}
+\end{align}
+where in the energy flux $\vec j_{\mathcal E}$
+we neglect terms  containing time derivatives
+of the eletric potentials and we sum over all species.
+
+With our choice of boundary conditions both the mass as well as the energy flux
+vanishes on the boundary. In the absence of artificial viscosity the volume integrated
+mass and energy density are thus exact invariants of the system.
+%%%%%%%%%%%%%%%%%%%%%
+\section{Blob related quantities}
+For the blob quantities it is important that we use the physical densities $\physs$.
+\begin{tcolorbox}[title=Note]
+    These quantities can be easily computed in post-processing in e.g. a python script.
+\end{tcolorbox}
+
+\subsection{Center of mass}
+The first quantity of interest is the Center-of-mass position
+\begin{align}
+    M :=& \int (\physs -1 ) \dV \\
+    X :=& \frac{1}{M} \int x(\physs - 1) \dV \\
+    Y :=& \frac{1}{M} \int y(\physs - 1) \dV
+\end{align}
+\subsection{Blob compactness}
+The blobs ability to retain its initial (Gaussian) shape is quantified by the  blob compactness
+\begin{align}
+     I_c(t) &:= \frac{\int dA (\physs(\vec{x},t)-1) h(\vec{x},t)}{\int dA
+(\physs(\vec{x},0)-1) h(\vec{x},0)}
+\end{align}
+Here, we introduced the heaviside function
+\begin{align}
+     h(\vec{x},t) &:= \begin{cases}
+          1,
+        &\ \text{if} \hspace{2mm}||\vec{x} - \vec{X}_{max}||^2 < \sigma^2 \\
+0,  &\ \text{else}
+           \end{cases} \nonumber
+\end{align}
+and the position of the maximum density \( \vec{X}_{max}(t)\).
+
+
+\section{The Input file} \label{sec:input_file}
 Input file format: \href{https://en.wikipedia.org/wiki/JSON}{json}
+%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Spatial grid} \label{sec:spatial}
+We define the simulation box as
+The spatial grid is an equidistant discretization of the 2D Cartesian
+product-space
+$[ x_0, x_1]\times [y_0, y_1]$,
+We use an equal number of Gaussian nodes in $x$ and $y$.
+\begin{minted}[texcomments]{js}
+"grid" :
+{
+    "n"  :  3, // The number of Gaussian nodes in x and y (3 is a good value)
+    "Nx"  : 48, // Number of cells in x
+    "Ny"  : 48, // Number of cells in y
+    "x"  : [0, 200], // $[x_0, x_1]$
+    "y"  : [0, 200], // $[y_0, y_1]$
+}
+\end{minted}
+\subsection{Elliptic solvers}
+We discretize all elliptic operators with a local dG method (LDG).  In order to
+solve the elliptic equations we chose a multigrid scheme (nested iterations in
+combination with conjugate gradient solves on each plane). The accuaracies for
+the polarization equation can be chosen for each stage separately, while for
+the Helmholtz type equations (the gamma operators) only
+one accuracy can be set (they typically are quite fast to solve):
+\begin{minted}[texcomments]{js}
+"elliptic":
+{
+    "stages"    : 3,  // Number of stages (3 is best in virtually all cases)
+    // $2^{\text{stages-1}}$ has to evenly divide both $N_x$ and $N_y$
+    "eps_pol"   : [1e-6,10,10],
+    // The first number is the tolerance for residual of the inversion of
+    // polarisation equation. The second number is a multiplicative
+    // factor for the accuracy on the second grid in a multigrid scheme, the
+    // third for the third grid and so on:
+    // $\eps_0 = \eps_{pol,0}$, $\eps_i = \eps_{pol,i} \eps_{pol,0}$  for $i>1$.
+    // Tuning those factors is a major performance tuning oppourtunity!!
+    // For saturated turbulence the suggested values are [1e-6, 2000, 100].
+    "eps_gamma" : 1e-10, // Accuracy requirement of Gamma operator
+    "direction" : "forward", // Direction of the Laplacian: forward or centered
+}
+\end{minted}
+\begin{tcolorbox}[title=Note]
+    We use solutions from previous time steps to extrapolate an initial guess
+    and use a diagonal preconditioner
+\end{tcolorbox}
+\subsection{Magnetic field}
+The parameter $\kappa$ is the curvature given by the input parameter
 \begin{minted}[texcomments]{js}
 {
-    "n" : 3,  // \# Gaussian nodes in x and y
-    "Nx" : 100, // \# grid points in x
-    "Ny" : 100,  // \# grid points in y
-    "dt" : 3.0,  // time step in units of $c_s/\rho_s$
-    "n_out"  : 3,  // \# Gaussian nodes in x and y in output
-    "Nx_out" : 100, // \# grid points in x in output fields
-    "Ny_out" : 100, // \# grid points in y in output fields
-    "itstp"  : 2,   // steps between outputs
-    "maxout" : 100, // \# outputs excluding first
-    "eps_pol"   : 1e-6    // accuracy of polarisation solver
-    "eps_gamma" : 1e-7    // accuracy of $\Gamma_1$ (only in gyrofluid model)
-    "eps_time"  : 1e-10,   // accuracy of implicit time-stepper
-    "curvature"  : 0.00015,// magnetic curvature $\kappa$
-    "tau"        : 1.0,      // $\tau = T_i/T_e$ (only in gyrofluid models)
-    "nu_perp"   : 5e-3,    // pependicular viscosity $\nu$
-    "amplitude"  : 1.0,    // amplitude $A$ of the blob
-    "sigma"      : 10.0,   // blob radius $\sigma$
-    "posX"       : 0.3,    // blob x-position in units of $l_x$, i.e. $X =p_x l_x$
-    "posY"       : 0.5,    // blob y-position in units of $l_y$, i.e. $Y =p_y l_y$
-    "lx"         : 200.0,  // $l_x$
-    "ly"         : 200.0,  // $l_y$
-    "friction"   :  0.0,   // friction coefficient $\eta$ in gravity model
-    "bc_x"   : "DIR",     // boundary condition in x (one of PER, DIR, NEU, DIR\_NEU or NEU\_DIR)
-    "bc_y"   : "PER",      // boundary condition in y (one of PER, DIR, NEU, DIR\_NEU or NEU\_DIR)
-    "equations"  : "global", // "local", "global", "gravity\_local", "gravity\_global", "drift\_global"
-    "boussinesq" : false,    // boussinesq approximation in global models true or false
+    "curvature" : 0.000457 // $\kappa$
+}
+\end{minted}
+\subsection{Electric potential}
+\begin{minted}[texcomments]{js}
+"potential" :
+{
+    "epsilon_D" : 0.,
+    bc : ["DIR", "PER"]
+},
+\end{minted}
+
+\subsection{Species Initialization}
+Each species is defined by an entry in the species list in the input file:
+\begin{minted}[texcomments]{js}
+"species":
+[
+    {
+        "name" : "electrons",
+        "mu" : 0.,
+        "tau" : -1.,
+        "a" :  -1.,
+        "nu_perp" : 1e-6,
+        "init":
+        {
+            // \ldots
+        },
+        bc :["DIR", "PER"]
+    },
+    {
+        "name" : "ions",
+        "mu" : 1.,
+        "tau" : 0.,
+        "a" :  0.9,
+        "nu_perp" : 1e-6,
+        "init":
+        {
+            // \ldots
+        },
+        bc :["DIR", "PER"]
+    },
+    // \ldots extend here
+],
+\end{minted}
+The number of species is implicitly given by the length of the list.
+\begin{tcolorbox}[title=Note]
+    The program will terminate if $\sum_s a_s \neq 0$. The species names chosen in the input file reflect in the names in the output file
+\end{tcolorbox}
+
+For the "init" field various schemes can be chosen
+\subsubsection{Constant background}
+A constant background $\ns = 1$ can be chosen via
+\begin{minted}[texcomments]{js}
+{
+    "type" : "const"
+}
+\end{minted}
+\subsubsection{Seeded blob}
+Initialization of $\ns$ as a Gaussian
+\begin{align} \label{eq:profile_blob}
+    \bar \ns(x,y) &= 1 + A\exp\left( -\frac{(x-X)^2 + (y-Y)^2}{2\sigma^2}\right) \\
+    \ns(x,y) &= \bar \ns(x,y) \text{ no FLR correction} \\
+    \ns(x,y) &= \Gamma_{1s}\bar \ns(x,y) \text{ FLR correction only for } \\
+    \ns(x,y) &= \Gamma_{1s}^{-1}\bar \ns(x,y) \text{ inverse FLR correction} \\
+\end{align}
+where $X = x_0 + p_x (x_1 - x_0)$ and $Y= y_0 + p_y( y_1 - y_0)$ are the initial centre of mass position coordinates, $A$ is the amplitude and $\sigma$ the
+radius of the blob.
+\begin{minted}[texcomments]{js}
+{
+    "type" : "gaussian",
+    "amplitude": 1.0, // $A$ in Eq.\eqref{eq:profile_blob}
+    "posX" : 0, // $p_x$ in Eq.\eqref{eq:profile_blob}
+    "posY" : 0, // $p_y$ in Eq.\eqref{eq:profile_blob}
+    "sigma" : 5.0, // $\sigma$ in Eq.\eqref{eq:profile_blob}
+    "flr" : "none", //only needed for $\mu_s\neq 0$
+    "flr" : "gamma", //only needed for $\mu_s\neq 0$
+    "flr" : "gamma_inv", //only needed for $\mu_s\neq 0$
+}
+\end{minted}
+\subsubsection{Wall}
+Initialization of $\ns$ as a Gaussian only in the x-direction
+\begin{align} \label{eq:profile_wall}
+    \bar \ns(x,y) &= 1 + A\exp\left( -\frac{(x-X)^2 }{2\sigma^2}\right) \\
+    \ns(x,y) &= \bar \ns(x,y) \text{ no FLR correction} \\
+    \ns(x,y) &= \Gamma_{1s}\bar \ns(x,y) \text{ FLR correction} \\
+    \ns(x,y) &= \Gamma_{1s}^{-1}\bar \ns(x,y) \text{ inverse FLR correction} \\
+\end{align}
+where $X = x_0 + p_x (x_1 - x_0)$ is the initial centre of mass position coordinates, $A$ is the amplitude and $\sigma$ the
+radius of the wall.
+\begin{minted}[texcomments]{js}
+{
+    "type" : "wall",
+    "amplitude": 1.0, // $A$ in Eq.\eqref{eq:profile_wall}
+    "posX" : 0, // $p_x$ in Eq.\eqref{eq:profile_wall}
+    "sigma" : 5.0, // $\sigma$ in Eq.\eqref{eq:profile_wall}
+    "flr" : "none", //only needed for $\mu_s\neq 0$
+    "flr" : "gamma", //only needed for $\mu_s\neq 0$
+    "flr" : "gamma_inv", //only needed for $\mu_s\neq 0$
 }
 \end{minted}
 
-The default value is taken if the value name is not found in the input file. If there is no default and
-the value is not found,
-the program exits with an error message.
+\subsubsection{ Set potential zero}
+A (single) field can be left to be determined by the condition $\phi = 0$ i.e.
+\begin{align}
+    \sum_s a_s \Gamma_{1s} \ns = 0
+\end{align}
+This currently works only for mass-less species with $\mu_s =0$ (i.e. electrons)
+\begin{align}
+    n_e(x,y) = -\sum_{s\neq e} \frac{a_s}{a_e} \Gamma_{1s}\ns
+\end{align}
+\begin{minted}[texcomments]{js}
+{
+    "type" : "zero_potential"
+}
+\end{minted}
+\subsection{Timestepper}
+We use an adaptive explicit embedded Runge Kutta timestepper to advance the equations in time
+\begin{minted}[texcomments]{js}
+"timestepper":
+{
+    "tableau" : "Bogacki-Shampine-4-2-3",
+    "rtol" : 1e-5,
+    "atol" : 1e-6
+}
+\end{minted}
 
-\subsection{Structure of output file}
+
+
+%\section{Structure of output file}
+%Output file format: netcdf-4/hdf5
+%%
+%%Name | Type | Dimensionality | Description
+%%---|---|---|---|
+%\begin{longtable}{lll>{\RaggedRight}p{7cm}}
+%\toprule
+%\rowcolor{gray!50}\textbf{Name} &  \textbf{Type} & \textbf{Dimension} & \textbf{Description}  \\ \midrule
+%inputfile  &             text attribute & 1 & verbose input file as a string \\
+%energy\_time             & Dataset & 1 & timesteps at which 1d variables are written \\
+%time                     & Dataset & 1 & time at which fields are written \\
+%x                        & Dataset & 1 & x-coordinate  \\
+%y                        & Dataset & 1 & y-coordinate \\
+%electrons                & Dataset & 3 (time, y, x) & electon density $n$ \\
+%ions                     & Dataset & 3 (time, y, x) & ion density $N$ or vorticity density $\rho$  \\
+%potential                & Dataset & 3 (time, y, x) & electric potential $\phi$  \\
+%vorticity                & Dataset & 3 (time, y, x) & Laplacian of potential $\nabla^2\phi$  \\
+%dEdt                     & Dataset & 1 (energy\_time) & change of energy per time  \\
+%dissipation              & Dataset & 1 (energy\_time) & diffusion integrals  \\
+%energy                   & Dataset & 1 (energy\_time) & total energy integral  \\
+%mass                     & Dataset & 1 (energy\_time) & mass integral   \\
+%\bottomrule
+%\end{longtable}
+%\section{Diagnostics toeflRdiag.cu}
+%There only is a shared memory version available
+%\begin{verbatim}
+%cd path/to/feltor/diag
+%make toeflRdiag
+%path/to/feltor/diag/toeflRdiag input.nc output.nc
+%\end{verbatim}
+%
+%Input file format: netcdf-4/hdf5
+%%
+%%Name | Type | Dimensionality | Description
+%%---|---|---|---|
+%\begin{longtable}{lll>{\RaggedRight}p{7cm}}
+%\toprule
+%\rowcolor{gray!50}\textbf{Name} &  \textbf{Type} & \textbf{Dimension} & \textbf{Description}  \\ \midrule
+%inputfile  &             text attribute & 1 & verbose input file as a string \\
+%electrons                & Dataset & 3 & electon density (time, y, x) \\
+%ions                     & Dataset & 3 & ion density (time, y, x) \\
+%potential                & Dataset & 3 & electric potential (time, y, x) \\
+%\bottomrule
+%\end{longtable}
+%
+%Output file format: netcdf-4/hdf5
+%%
+%%Name | Type | Dimensionality | Description
+%%---|---|---|---|
+%\begin{longtable}{lll>{\RaggedRight}p{7cm}}
+%\toprule
+%\rowcolor{gray!50}\textbf{Name} &  \textbf{Type} & \textbf{Dimension} & \textbf{Description}  \\ \midrule
+% inputfile & text attribute & 1 & copy of inputfile attribute of the input file (the json string of the simulation input file) \\
+% time & Dataset & 1 & the time steps at which variables are written \\
+% posX & Dataset & 1 (time) & centre of mass (COM) position x-coordinate \\
+% posY & Dataset & 1 (time) &COM y-position \\
+% velX & Dataset & 1 (time)& COM x-velocity \\
+% velY & Dataset & 1 (time)& COM y-velocity \\
+% accX & Dataset & 1 (time)& COM x-acceleration \\
+% accY & Dataset & 1 (time)& COM y-acceleration \\
+% velCOM & Dataset & 1 (time)&absolute value of the COM velocity \\
+% posXmax& Dataset & 1 (time)&maximum amplitude x-position \\
+% posYmax& Dataset & 1 (time)&maximum amplitude y-position \\
+% velXmax& Dataset & 1 (time)&maximum amplitude x-velocity \\
+% velYmax& Dataset & 1 (time)&maximum amplitude y-velocity \\
+% maxamp & Dataset & 1 (time)&value of the maximum amplitude  \\
+%  compactness\_ne& Dataset & 1 (time) &compactness of the density field \\
+% Ue& Dataset&  1 (time) &entropy electrons \\
+% Ui &Dataset& 1 (time) & entropy ions \\
+% Uphi& Dataset& 1 (time) &  exb energy \\
+% mass& Dataset & 1 (time) & mass of the blob without background \\
+%\bottomrule
+%\end{longtable}
+%
+%
+%
+%
+\section{Output}
+Our program can either write results directly to screen using the glfw library
+or write results to disc using netcdf.
+This can be controlled via
+\begin{minted}[texcomments]{js}
+"output":
+{
+    // Use glfw to display results in a window while computing (requires to
+    // compile with the glfw3 library)
+    "type"  : "glfw"
+    "itstp"  : 4, // The number of steps between outputs of 2d fields
+
+    // Use netcdf to write results into a file (filename given on command line)
+    // (see next section for information about what is written in there)
+    "type"  : "netcdf"
+    "itstp"  : 4,    // The number of steps between outputs of 2d fields
+    "maxout"  : 500, // The total number of field outputs. The endtime is
+    // T=itstp*maxout*dt
+    "n"  : 3 , // The number of polynomial coefficients in the output file
+    "Nx" : 48, // Number of cells in x in the output file
+    "Ny" : 48  // Number of cells in y in the output file
+}
+\end{minted}
+The number of points in the output file can be lower (or higher) than the number of
+grid points used for the calculation. The points will be interpolated from the
+computational grid.
+\subsection{Netcdf file}
 Output file format: netcdf-4/hdf5
-%
-%Name | Type | Dimensionality | Description
-%---|---|---|---|
+
 \begin{longtable}{lll>{\RaggedRight}p{7cm}}
 \toprule
 \rowcolor{gray!50}\textbf{Name} &  \textbf{Type} & \textbf{Dimension} & \textbf{Description}  \\ \midrule
-inputfile  &             text attribute & 1 & verbose input file as a string \\
-energy\_time             & Dataset & 1 & timesteps at which 1d variables are written \\
-time                     & Dataset & 1 & time at which fields are written \\
-x                        & Dataset & 1 & x-coordinate  \\
-y                        & Dataset & 1 & y-coordinate \\
-electrons                & Dataset & 3 (time, y, x) & electon density $n$ \\
-ions                     & Dataset & 3 (time, y, x) & ion density $N$ or vorticity density $\rho$  \\
-potential                & Dataset & 3 (time, y, x) & electric potential $\phi$  \\
-vorticity                & Dataset & 3 (time, y, x) & Laplacian of potential $\nabla^2\phi$  \\
-dEdt                     & Dataset & 1 (energy\_time) & change of energy per time  \\
-dissipation              & Dataset & 1 (energy\_time) & diffusion integrals  \\
-energy                   & Dataset & 1 (energy\_time) & total energy integral  \\
-mass                     & Dataset & 1 (energy\_time) & mass integral   \\
+inputfile        & text attribute & 1 & verbose input file as a string \\
+time             & Coord. Var. & 1 (time) & time at which fields are written \\
+x                & Coord. Var. & 1 (x) & x-coordinate  \\
+y                & Coord. Var. & 1 (y) & y-coordinate \\
+xc               & Dataset & 2 (y,x) & Cartesian x-coordinate  \\
+yc               & Dataset & 2 (y,x) & Cartesian y-coordinate \\
+X                & Dataset & 3 (time, y, x) & 2d outputs \\
+X\_1d            & Dataset & 1 (time) & 1d volume integrals $\int \dV X$ \\
+time\_per\_step  & Dataset & 1 (time) & Average computation time for one step \\
 \bottomrule
 \end{longtable}
-\section{Diagnostics toeflRdiag.cu}
-There only is a shared memory version available
-\begin{verbatim}
-cd path/to/feltor/diag
-make toeflRdiag
-path/to/feltor/diag/toeflRdiag input.nc output.nc
-\end{verbatim}
+The output fields X are determined in the file \texttt{feltor/src/reco2D/diag.h}.
+%where
+%X and Y\_tt represent the quantities described in the tables in this section starting with the quantities
+%\begin{longtable}{llll}
+%\toprule
+%\rowcolor{gray!50}\textbf{Name} &  \textbf{Equation} & \textbf{Name} &  \textbf{Equation}\\
+%\midrule
+%    electrons &$n_e$ &
+%    ions &$N_i$ \\
+%    Ue &$u_{\parallel,e}$ &
+%    Ui &$U_{\parallel,i}$ \\
+%    potential &$\phi$ &
+%    psi &$\psi$ \\
+%    aparallel &$A_\parallel$ & \\
+%    vorticity &$-\Delta_\perp\phi$ &
+%    apar\_vorticity &$-\Delta_\perp A_\parallel$ \\
+%    dssue & $\npar^2 u_{\parallel,e}$&
+%    %dppue & $\partial_\varphi^2 u_{\parallel,e}$\\
+%    %dpue2 & $(\partial_\varphi u_{\parallel,e})^2$&
+%    lperpinv &$L_\perp^{-1} := |\vec\np n_e|/n_e$ \\
+%    perpaligned &$(\vec\np n_e)^2/n_e$ &
+%    lparallelinv &$L_\parallel^{-1} := |\npar n_e|/n_e$ \\
+%    aligned &$ (\npar n_e)^2/n_e$ &
+%    ne2 & $n_e^2$ \\
+%    phi2 & $\phi^2$ &
+%    nephi & $n_e\phi$ \\
+%\bottomrule
+%\end{longtable}
+%The computation time spent on diagnostics is negligible if {\tt inner\_loop}
+%parameter is greater than 1. Also remember that the X and Y fields are all
+%two-dimensional, which takes up much less disk-space than three-dimensional
+%fields.
 
-Input file format: netcdf-4/hdf5
+%\subsection{Conservation laws} \label{sec:conservation}
+%In the output file we have
+%\subsection{Mass conservation}
+%The density equations directly yield the particle conservation
+%\begin{align} \label{eq:mass_theorem}
+%  \frac{\partial}{\partial t} N
+%  + \nc\vec{ j_{N}}
+%  =  \Lambda_{N}+S_{N}
+%\end{align}
+%The terms of the particle conservation thus read
+%\begin{align}
+%  N= & N,\\
+%  \vec j_{N} =& N\left(
+%  \vec u_\psi + \vec u_C + \vec u_{K} +U_\parallel\left(\bhat+{\vec b}_\perp\right)  \right)
+%\label{eq:particle_flux}\\
+%  %\nonumber\\
+%  %=& N \left(\frac{\bhat\times \vn\phi}{B}
+%  %+ \tau_e \frac{\bhat\times\vn n_e}{n_eB}
+%  %+ \mu_e u_{\parallel,e}^2\vec K_{\vn\times\bhat}
+%  %+ u_{\parallel,e}(\bhat + {\vec b}_\perp) \right), \\
+%  \Lambda_{N} =& \Lambda_N
+%\\
+%  S_{N} =&  S_{N}
+%\end{align}
+%Notice that
+%\begin{align}
+%\tau N \vec K = \tau N\vn\times\frac{\bhat}{B} = \tau \vn\times N\frac{\bhat}{B} + \tau \frac{\bhat\times\vn N}{B}
+%\label{}
+%\end{align}
+%such that we can define the diamagnetic flux in the particle flux since
+%the rotation vanishes under the divergence.
 %
-%Name | Type | Dimensionality | Description
-%---|---|---|---|
-\begin{longtable}{lll>{\RaggedRight}p{7cm}}
-\toprule
-\rowcolor{gray!50}\textbf{Name} &  \textbf{Type} & \textbf{Dimension} & \textbf{Description}  \\ \midrule
-inputfile  &             text attribute & 1 & verbose input file as a string \\
-electrons                & Dataset & 3 & electon density (time, y, x) \\
-ions                     & Dataset & 3 & ion density (time, y, x) \\
-potential                & Dataset & 3 & electric potential (time, y, x) \\
-\bottomrule
-\end{longtable}
-
-Output file format: netcdf-4/hdf5
+%We here also derive the particle flux \eqref{eq:particle_flux} through a flux surface
+%\begin{align} \label{eq:radial_particle_flux}
+% \vec j_{N}\cn v %=& N\left( \vec u_E + \vec u_C + \vec u_{\vn
+% %B} + U_\parallel \left(\bhat + {\vec b}_\perp\right)\right) \cn \psi_p \nonumber\\
+% =&
+%  \frac{\d v}{\d \psi_p} N\left[\frac{1}{B}[\psi, \psi_p]_\perp + \left(\tau + \mu U_\parallel^2\right)
+%   \mathcal K_{\vn\times\bhat}(\psi_p) + \tau  \mathcal K_{\vn B}(\psi_p) \right] \nonumber\\
+% &+ NU_\parallel\frac{\d v}{\d \psi_p}\left [\left( A_\parallel \mathcal
+% K_{\vn\times\bhat}(\psi_p) + \frac{1}{B}[\psi_p, A_\parallel]_\perp\right) \right]
+%\end{align}
 %
-%Name | Type | Dimensionality | Description
-%---|---|---|---|
-\begin{longtable}{lll>{\RaggedRight}p{7cm}}
-\toprule
-\rowcolor{gray!50}\textbf{Name} &  \textbf{Type} & \textbf{Dimension} & \textbf{Description}  \\ \midrule
- inputfile & text attribute & 1 & copy of inputfile attribute of the input file (the json string of the simulation input file) \\
- time & Dataset & 1 & the time steps at which variables are written \\
- posX & Dataset & 1 (time) & centre of mass (COM) position x-coordinate \\
- posY & Dataset & 1 (time) &COM y-position \\
- velX & Dataset & 1 (time)& COM x-velocity \\
- velY & Dataset & 1 (time)& COM y-velocity \\
- accX & Dataset & 1 (time)& COM x-acceleration \\
- accY & Dataset & 1 (time)& COM y-acceleration \\
- velCOM & Dataset & 1 (time)&absolute value of the COM velocity \\
- posXmax& Dataset & 1 (time)&maximum amplitude x-position \\
- posYmax& Dataset & 1 (time)&maximum amplitude y-position \\
- velXmax& Dataset & 1 (time)&maximum amplitude x-velocity \\
- velYmax& Dataset & 1 (time)&maximum amplitude y-velocity \\
- maxamp & Dataset & 1 (time)&value of the maximum amplitude  \\
-  compactness\_ne& Dataset & 1 (time) &compactness of the density field \\
- Ue& Dataset&  1 (time) &entropy electrons \\
- Ui &Dataset& 1 (time) & entropy ions \\
- Uphi& Dataset& 1 (time) &  exb energy \\
- mass& Dataset & 1 (time) & mass of the blob without background \\
-\bottomrule
-\end{longtable}
-
+%The relevant terms in the output file are
+%\begin{longtable}{llll}
+%\toprule
+%\rowcolor{gray!50}\textbf{Name} &  \textbf{Equation} & \textbf{Name} &  \textbf{Equation}\\
+%\midrule
+%    electrons & $n_e$ &
+%    jsneC\_tt &$ n_e ( \vec u_K + \vec u_C )\cn \psi_p$ \\
+%    jsneA\_tt &$ n_e u_{\parallel,e} \vec{ b}_\perp  \cn \psi_p$ &
+%    jsneE\_tt & $ n_e \vec u_E\cn\psi_p$ \\
+%    lneperp\_tt &$ \Lambda_{\perp,n_e} = -\nu_{n,\perp} (-\Delta_\perp)^s n_e$&
+%    & \\
+%    %lneparallel\_tt &$ \Lambda_{\parallel,n_e} = \nu_{N\parallel} \Delta_\parallel n_e$ \\
+%    sne\_tt & $S_{n_e}$ &
+%    jsdiae\_tt & $\tau_e \bhat \times \vn n_e \cn \psi_p /B$\\
+%    divjnepar\_tt & $\nc (\bhat n_e u_{e,\parallel}$) &
+%    & \\
+%    ions & $N_i$ &
+%    jsniC\_tt &$ N_i ( \vec u_K + \vec u_C )\cn \psi_p$ \\
+%    jsniA\_tt &$ N_i U_{\parallel,i} \vec{ b}_\perp  \cn \psi_p$ &
+%    jsniE\_tt & $ N_i \vec u^i_E\cn\psi_p$ \\
+%    lniperp\_tt &$ \Lambda_{\perp,N_i} = -\nu_{n,\perp} (-\Delta_\perp)^s N_i$&
+%    & \\
+%    %lniparallel\_tt &$ \Lambda_{\parallel,N_i} = \nu_{N,\parallel} \Delta_\parallel N_i$ \\
+%    sni\_tt & $S_{N_i}$ &
+%    jsdiai\_tt & $\tau_i \bhat \times \vn N_i \cn \psi_p /B$\\
+%    divjnipar\_tt & $\nc (\bhat N_i U_{i,\parallel}$) &
+%      & \\
+%\bottomrule
+%\end{longtable}
+%
+%
+%
+%Note that the parallel divergences vanish exactly under a flux-surface average. This can serve as a numerical test of our implementation.
+%\subsection{Energy theorem}
+%The terms of the energy theorem are
+%\begin{align} \label{eq:energy_theorem}
+%\partial_t \mathcal E +
+%\nc \vec j_{\mathcal E}
+%= \Lambda_{\mathcal E}
+%+  S_{\mathcal E}
+%+  R_{\mathcal E}
+%\end{align}
+%with ( $z_e=-1$ and $z_i=+1$) and $\vec u_E := {\bhat\times \vn\phi}/{B}$
+%\begin{align} \label{eq:energy_conservation}
+%  \mathcal{E}= & z_e\tau_e n_e \ln{(n_e)} +z_i\tau_i N_i\ln{(N_i)}
+%  +\frac{1}{2\beta}\left(\np A_\parallel\right)^2
+%   +  \frac{1}{2} z_i \mu_i N_i u_E^2  \nonumber\\
+%   & +\frac{1}{2} z_e\mu_e  n_e u_{\parallel,e}^2
+%  +\frac{1}{2} z_i\mu_i  N_i U_{\parallel,i}^2,\\
+%  \vec j_{\mathcal E} =& \sum_s z\left[
+%  \left(\tau \ln N + \frac{1}{2}\mu U_\parallel^2 + \psi \right)N\left(
+%  \vec u_E + \vec u_C + \vec u_{K} +U_\parallel\left(\bhat+{\vec b}_\perp\right)  \right) \right]
+%  \nonumber\\
+%  &+ \sum_z z\left[\mu \tau NU_\parallel^2\vec K_{\vn\times\bhat} + \tau NU_\parallel \left(\bhat + {\vec b}_\perp\right)\right], \\
+%  \Lambda_{\mathcal E} =&  \sum_s z\left[\left( \tau\left( 1+\ln{N}\right) + \psi + \frac{1}{2} \mu U_\parallel^2 \right)
+%  \Lambda_N  +  \mu NU_\parallel\Lambda_U + \mu \nu_\parallel U_\parallel \Delta_\parallel U_\parallel \right]
+%\nonumber \\
+%  S_{\mathcal E} =&  \sum_s  z\left[ \left(\tau\left( 1+\ln{N}\right) +\psi + \frac{1}{2} \mu U_\parallel^2 \right)S_{N}\right]
+%\nonumber \\
+%R_{\mathcal E} =&  -\eta_\parallel  n_e(U_{\parallel,i}-u_{\parallel,e})(N_iU_{\parallel,i} - n_eu_{\parallel,e}).
+%\end{align}
+%where in the energy flux $\vec j_{\mathcal E}$
+%we neglect terms  containing time derivatives
+%of the eletric and magnetic potentials and we sum over all species.
+%The energy density $\mathcal E$ consists of the Helmholtz free energy density for electrons and ions,
+%the \(\vec{E} \times \vec{B}\) energy density, the parallel energy densities for electrons and ions and the perturbed magnetic field energy density.
+%In \(\Lambda\) we insert the dissipative terms of Section~\ref{sec:dissres}. \\
+%Replace $\Delta_\perp$ with $-\Delta_\perp^2$ when hyperviscous diffusion is chosen
+%for the diffusion terms in the above equations.
+%
+%We have the energy flux through a flux surface
+%\begin{align}
+% \vec j_{\mathcal E}\cn v =&%\frac{\d v}{\d \psi_p} \vec j_{\mathcal E}\cn \psi_p  =
+%\frac{\d v}{\d \psi_p}\sum_s z\left (\tau\ln N + \frac{1}{2}\mu U_\parallel^2 + \psi\right) \vec j_N\cn\psi_p
+%+ z \mu\tau NU_\parallel^2 \mathcal K_{\vn\times\bhat}(\psi_p) \nonumber\\
+%&+ z \tau NU_\parallel
+% \left( A_\parallel \mathcal
+% K_{\vn\times\bhat}(\psi_p) + \frac{1}{B}[\psi_p, A_\parallel]_\perp\right)
+%\label{eq:energy_flux}
+%\end{align}
+%The relevant terms in the output file are
+%\begin{longtable}{ll}
+%\toprule
+%\rowcolor{gray!50}\textbf{Name} &  \textbf{Equation}\\
+%\midrule
+%    nelnne &$ z_e\tau_e n_e \ln n_e$ \\
+%    nilnni &$ z_i\tau_i N_i \ln N_i$ \\
+%    aperp2 &$ (\np A_\parallel)^2/2/\beta$ \\
+%    ue2   &$z_i\mu_i N_i u_E^2 /2$ \\
+%    neue2 &$ z_e\mu_e n_e u_{\parallel,e}^2/2$ \\
+%    niui2 &$ z_i\mu_i N_i U_{\parallel,i}^2/2$ \\
+%    see\_tt & $z_e(\tau_e (1+\ln n_e) + \phi + \frac{1}{2}\mu_e u_{\parallel,e}^2) S_{n_e} $ \\
+%    sei\_tt & $z_i(\tau_i (1+\ln N_i) + \psi + \frac{1}{2}\mu_i U_{\parallel,i}^2) S_{N_i} $ \\
+%    resistivity\_tt &-$\eta_\parallel n_e (U_{\parallel,i}-u_{\parallel,e})(N_iU_{\parallel,i}-n_eu_{\parallel,e})$ \\
+%    jsee\_tt &$z_e(\tau_e \ln n_e + \mu_e u_{\parallel,e}^2/2 + \phi)n_e(\vec u_E + \vec u_C + \vec u_K)\cn \psi_p
+%        + z_e \tau_e n_e u_{\parallel,e}^2 \vec K_{\vn\times\bhat}\cn \psi_p$ \\
+%    jsei\_tt &$z_i(\tau_i \ln N_i + \mu_i U_{\parallel,i}^2/2 + \psi_i)N_i(\vec u_E^i + \vec u_C + \vec u_K)\cn \psi_p
+%        + z_i \tau_i N_i U_{\parallel,i}^2 \vec K_{\vn\times\bhat}\cn \psi_p$ \\
+%    jseea\_tt &$z_e(\tau_e \ln n_e + \mu_e u_{\parallel,e}^2 + \phi)n_e \vec { b}_\perp\cn \psi_p
+%        + z_e \tau_e n_e u_{\parallel,e} \vec{ b}_\perp \cn \psi_p $ \\
+%    jseia\_tt &$z_i(\tau_i \ln N_i + \mu_i U_{\parallel,i}^2 + \psi_i)N_i \vec { b}_\perp\cn \psi_p
+%        + z_i \tau_i N_i U_{\parallel,i} \vec{ b}_\perp \cn \psi_p $ \\
+%    leeperp\_tt &$z_e(\tau_e(1+\ln n_e) + \phi + \mu_eu_{\parallel,e}^2/2) \Lambda_{n_e} + z_e\mu_e n_e u_{\parallel,e} \Lambda_{u_e}$ \\
+%    leiperp\_tt &$z_i(\tau_i(1+\ln N_i) + \psi_i + \mu_iU_{\parallel,i}^2/2) \Lambda_{N_i} + z_i\mu_i N_i U_{\parallel,i} \Lambda_{U_i}$ \\
+%    %leeparallel\_tt & $z_e(\tau_e(1+\ln n_e) + \phi + \mu_eu_{\parallel,e}^2/2) \nu_{N,\parallel} \Delta_\parallel n_e +
+%    %z_e\mu_e n_e u_{\parallel,e} \nu_{\parallel,e} \Delta_\parallel u_{\parallel,e}$ \\
+%    %leiparallel\_tt & $z_i(\tau_i(1+\ln N_i) + \psi_i + \mu_iU_{\parallel,i}^2/2) \nu_{N,\parallel} \Delta_\parallel N_i +
+%    %z_i\mu_i N_i
+%    %U_{\parallel,i} \nu_{\parallel,i} \Delta_\parallel U_{\parallel,i}$ \\
+%    leeparallel\_tt & $ z_e\mu_e u_{\parallel,e} \nu_{\parallel,e} \Delta_\parallel u_{\parallel,e}$ \\
+%    leiparallel\_tt & $ z_i\mu_i U_{\parallel,i} \nu_{\parallel,i} \Delta_\parallel U_{\parallel,i}$ \\
+%    divjeepar\_tt &$ z_e\nc \left( (\tau_e(1+\ln n_e) + \phi + \mu_eu_{\parallel,e}^2/2) n_eu_{\parallel,e}\bhat\right)$ \\
+%    divjeipar\_tt &$ z_i\nc \left( (\tau_i(1+\ln N_i) + \psi + \mu_iU_{\parallel,i}^2/2) N_iU_{\parallel,i}\bhat\right)$ \\
+%\bottomrule
+%\end{longtable}
 
 %..................................................................
 \bibliography{../common/references}
 %..................................................................
-
 
 \end{document}
