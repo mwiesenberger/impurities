@@ -102,13 +102,31 @@ The overall plasma quasi-neutrality reads
 \end{align}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \section{Invariants}
-The mass density and diffusions are
+\subsection{Mass}
+The particles density conservation reads
+\begin{align} \label{eq:mass_theorem}
+  \frac{\partial}{\partial t} \mathcal M_s
+  + \nc\vec{ j_{n,s}}
+  =  \Lambda_{\ns}
+\end{align}
+with
 \begin{align}
     \mathcal M &= \ns \\
     \vec j_{n,s} &= \ns \vec v_E + \vec v_\kappa \\
      \Lambda_\ns &= -\nu_\perp \Delta_\perp^2 \ns
 \end{align}
+With vanishing flux on the boundaries and zero viscosity we have
+\begin{align}
+    \frac{\partial}{\partial t} \int \dV \mathcal M_s = 0
+\end{align}
 
+\subsection{Energy}
+The energy theorem reads
+\begin{align} \label{eq:energy_theorem}
+  \frac{\partial}{\partial t} \mathcal E
+  + \nc\vec{ j_{\mathcal E}}
+  =  \Lambda_{\mathcal E}
+\end{align}
 The inherent energy density of our system is:
 \begin{align}
  \mathcal{E} := &
@@ -118,7 +136,7 @@ The energy current density and diffusion are
 \begin{align}
   \vec j_{\mathcal E} =& \sum_s a_s\left[
   \left(\tau_s \ln \ns + \psi_s \right)\ns\left(
-  \vec u_E + u_\kappa \right) \right]
+  \vec u_E + \vec u_\kappa \right) \right]
   , \\
     \Lambda_\mathcal{E} :=  &+ \left( \tau_s ( 1+\ln \ns) + \psi_s\right)(-\nu_\perp \Delta_\perp^2 \ns)
     \label{eq:energy_diffusion}
@@ -127,9 +145,13 @@ where in the energy flux $\vec j_{\mathcal E}$
 we neglect terms  containing time derivatives
 of the eletric potentials and we sum over all species.
 
-With our choice of boundary conditions both the mass as well as the energy flux
-vanishes on the boundary. In the absence of artificial viscosity the volume integrated
-mass and energy density are thus exact invariants of the system.
+With our choice of boundary conditions the energy flux
+vanishes on the boundary.
+In the absence of artificial viscosity the volume integrated
+ energy density is thus an exact invariant of the system.
+\begin{align}
+    \frac{\partial}{\partial t} \int \dV \mathcal E = 0
+\end{align}
 %%%%%%%%%%%%%%%%%%%%%
 \section{Blob related quantities}
 For the blob quantities it is important that we use the physical densities $\physs$.
@@ -454,201 +476,11 @@ x                & Coord. Var. & 1 (x) & x-coordinate  \\
 y                & Coord. Var. & 1 (y) & y-coordinate \\
 xc               & Dataset & 2 (y,x) & Cartesian x-coordinate  \\
 yc               & Dataset & 2 (y,x) & Cartesian y-coordinate \\
+weights          & Dataset & 2 (y,x) & Gaussian integration weights \\
 X                & Dataset & 3 (time, y, x) & 2d outputs \\
-X\_1d            & Dataset & 1 (time) & 1d volume integrals $\int \dV X$ \\
 \bottomrule
 \end{longtable}
 The output fields X are determined in the file \texttt{impurities/diag.h}.
-%where
-%X and Y\_tt represent the quantities described in the tables in this section starting with the quantities
-%\begin{longtable}{llll}
-%\toprule
-%\rowcolor{gray!50}\textbf{Name} &  \textbf{Equation} & \textbf{Name} &  \textbf{Equation}\\
-%\midrule
-%    electrons &$n_e$ &
-%    ions &$N_i$ \\
-%    Ue &$u_{\parallel,e}$ &
-%    Ui &$U_{\parallel,i}$ \\
-%    potential &$\phi$ &
-%    psi &$\psi$ \\
-%    aparallel &$A_\parallel$ & \\
-%    vorticity &$-\Delta_\perp\phi$ &
-%    apar\_vorticity &$-\Delta_\perp A_\parallel$ \\
-%    dssue & $\npar^2 u_{\parallel,e}$&
-%    %dppue & $\partial_\varphi^2 u_{\parallel,e}$\\
-%    %dpue2 & $(\partial_\varphi u_{\parallel,e})^2$&
-%    lperpinv &$L_\perp^{-1} := |\vec\np n_e|/n_e$ \\
-%    perpaligned &$(\vec\np n_e)^2/n_e$ &
-%    lparallelinv &$L_\parallel^{-1} := |\npar n_e|/n_e$ \\
-%    aligned &$ (\npar n_e)^2/n_e$ &
-%    ne2 & $n_e^2$ \\
-%    phi2 & $\phi^2$ &
-%    nephi & $n_e\phi$ \\
-%\bottomrule
-%\end{longtable}
-%The computation time spent on diagnostics is negligible if {\tt inner\_loop}
-%parameter is greater than 1. Also remember that the X and Y fields are all
-%two-dimensional, which takes up much less disk-space than three-dimensional
-%fields.
-
-%\subsection{Conservation laws} \label{sec:conservation}
-%In the output file we have
-%\subsection{Mass conservation}
-%The density equations directly yield the particle conservation
-%\begin{align} \label{eq:mass_theorem}
-%  \frac{\partial}{\partial t} N
-%  + \nc\vec{ j_{N}}
-%  =  \Lambda_{N}+S_{N}
-%\end{align}
-%The terms of the particle conservation thus read
-%\begin{align}
-%  N= & N,\\
-%  \vec j_{N} =& N\left(
-%  \vec u_\psi + \vec u_C + \vec u_{K} +U_\parallel\left(\bhat+{\vec b}_\perp\right)  \right)
-%\label{eq:particle_flux}\\
-%  %\nonumber\\
-%  %=& N \left(\frac{\bhat\times \vn\phi}{B}
-%  %+ \tau_e \frac{\bhat\times\vn n_e}{n_eB}
-%  %+ \mu_e u_{\parallel,e}^2\vec K_{\vn\times\bhat}
-%  %+ u_{\parallel,e}(\bhat + {\vec b}_\perp) \right), \\
-%  \Lambda_{N} =& \Lambda_N
-%\\
-%  S_{N} =&  S_{N}
-%\end{align}
-%Notice that
-%\begin{align}
-%\tau N \vec K = \tau N\vn\times\frac{\bhat}{B} = \tau \vn\times N\frac{\bhat}{B} + \tau \frac{\bhat\times\vn N}{B}
-%\label{}
-%\end{align}
-%such that we can define the diamagnetic flux in the particle flux since
-%the rotation vanishes under the divergence.
-%
-%We here also derive the particle flux \eqref{eq:particle_flux} through a flux surface
-%\begin{align} \label{eq:radial_particle_flux}
-% \vec j_{N}\cn v %=& N\left( \vec u_E + \vec u_C + \vec u_{\vn
-% %B} + U_\parallel \left(\bhat + {\vec b}_\perp\right)\right) \cn \psi_p \nonumber\\
-% =&
-%  \frac{\d v}{\d \psi_p} N\left[\frac{1}{B}[\psi, \psi_p]_\perp + \left(\tau + \mu U_\parallel^2\right)
-%   \mathcal K_{\vn\times\bhat}(\psi_p) + \tau  \mathcal K_{\vn B}(\psi_p) \right] \nonumber\\
-% &+ NU_\parallel\frac{\d v}{\d \psi_p}\left [\left( A_\parallel \mathcal
-% K_{\vn\times\bhat}(\psi_p) + \frac{1}{B}[\psi_p, A_\parallel]_\perp\right) \right]
-%\end{align}
-%
-%The relevant terms in the output file are
-%\begin{longtable}{llll}
-%\toprule
-%\rowcolor{gray!50}\textbf{Name} &  \textbf{Equation} & \textbf{Name} &  \textbf{Equation}\\
-%\midrule
-%    electrons & $n_e$ &
-%    jsneC\_tt &$ n_e ( \vec u_K + \vec u_C )\cn \psi_p$ \\
-%    jsneA\_tt &$ n_e u_{\parallel,e} \vec{ b}_\perp  \cn \psi_p$ &
-%    jsneE\_tt & $ n_e \vec u_E\cn\psi_p$ \\
-%    lneperp\_tt &$ \Lambda_{\perp,n_e} = -\nu_{n,\perp} (-\Delta_\perp)^s n_e$&
-%    & \\
-%    %lneparallel\_tt &$ \Lambda_{\parallel,n_e} = \nu_{N\parallel} \Delta_\parallel n_e$ \\
-%    sne\_tt & $S_{n_e}$ &
-%    jsdiae\_tt & $\tau_e \bhat \times \vn n_e \cn \psi_p /B$\\
-%    divjnepar\_tt & $\nc (\bhat n_e u_{e,\parallel}$) &
-%    & \\
-%    ions & $N_i$ &
-%    jsniC\_tt &$ N_i ( \vec u_K + \vec u_C )\cn \psi_p$ \\
-%    jsniA\_tt &$ N_i U_{\parallel,i} \vec{ b}_\perp  \cn \psi_p$ &
-%    jsniE\_tt & $ N_i \vec u^i_E\cn\psi_p$ \\
-%    lniperp\_tt &$ \Lambda_{\perp,N_i} = -\nu_{n,\perp} (-\Delta_\perp)^s N_i$&
-%    & \\
-%    %lniparallel\_tt &$ \Lambda_{\parallel,N_i} = \nu_{N,\parallel} \Delta_\parallel N_i$ \\
-%    sni\_tt & $S_{N_i}$ &
-%    jsdiai\_tt & $\tau_i \bhat \times \vn N_i \cn \psi_p /B$\\
-%    divjnipar\_tt & $\nc (\bhat N_i U_{i,\parallel}$) &
-%      & \\
-%\bottomrule
-%\end{longtable}
-%
-%
-%
-%Note that the parallel divergences vanish exactly under a flux-surface average. This can serve as a numerical test of our implementation.
-%\subsection{Energy theorem}
-%The terms of the energy theorem are
-%\begin{align} \label{eq:energy_theorem}
-%\partial_t \mathcal E +
-%\nc \vec j_{\mathcal E}
-%= \Lambda_{\mathcal E}
-%+  S_{\mathcal E}
-%+  R_{\mathcal E}
-%\end{align}
-%with ( $z_e=-1$ and $z_i=+1$) and $\vec u_E := {\bhat\times \vn\phi}/{B}$
-%\begin{align} \label{eq:energy_conservation}
-%  \mathcal{E}= & z_e\tau_e n_e \ln{(n_e)} +z_i\tau_i N_i\ln{(N_i)}
-%  +\frac{1}{2\beta}\left(\np A_\parallel\right)^2
-%   +  \frac{1}{2} z_i \mu_i N_i u_E^2  \nonumber\\
-%   & +\frac{1}{2} z_e\mu_e  n_e u_{\parallel,e}^2
-%  +\frac{1}{2} z_i\mu_i  N_i U_{\parallel,i}^2,\\
-%  \vec j_{\mathcal E} =& \sum_s z\left[
-%  \left(\tau \ln N + \frac{1}{2}\mu U_\parallel^2 + \psi \right)N\left(
-%  \vec u_E + \vec u_C + \vec u_{K} +U_\parallel\left(\bhat+{\vec b}_\perp\right)  \right) \right]
-%  \nonumber\\
-%  &+ \sum_z z\left[\mu \tau NU_\parallel^2\vec K_{\vn\times\bhat} + \tau NU_\parallel \left(\bhat + {\vec b}_\perp\right)\right], \\
-%  \Lambda_{\mathcal E} =&  \sum_s z\left[\left( \tau\left( 1+\ln{N}\right) + \psi + \frac{1}{2} \mu U_\parallel^2 \right)
-%  \Lambda_N  +  \mu NU_\parallel\Lambda_U + \mu \nu_\parallel U_\parallel \Delta_\parallel U_\parallel \right]
-%\nonumber \\
-%  S_{\mathcal E} =&  \sum_s  z\left[ \left(\tau\left( 1+\ln{N}\right) +\psi + \frac{1}{2} \mu U_\parallel^2 \right)S_{N}\right]
-%\nonumber \\
-%R_{\mathcal E} =&  -\eta_\parallel  n_e(U_{\parallel,i}-u_{\parallel,e})(N_iU_{\parallel,i} - n_eu_{\parallel,e}).
-%\end{align}
-%where in the energy flux $\vec j_{\mathcal E}$
-%we neglect terms  containing time derivatives
-%of the eletric and magnetic potentials and we sum over all species.
-%The energy density $\mathcal E$ consists of the Helmholtz free energy density for electrons and ions,
-%the \(\vec{E} \times \vec{B}\) energy density, the parallel energy densities for electrons and ions and the perturbed magnetic field energy density.
-%In \(\Lambda\) we insert the dissipative terms of Section~\ref{sec:dissres}. \\
-%Replace $\Delta_\perp$ with $-\Delta_\perp^2$ when hyperviscous diffusion is chosen
-%for the diffusion terms in the above equations.
-%
-%We have the energy flux through a flux surface
-%\begin{align}
-% \vec j_{\mathcal E}\cn v =&%\frac{\d v}{\d \psi_p} \vec j_{\mathcal E}\cn \psi_p  =
-%\frac{\d v}{\d \psi_p}\sum_s z\left (\tau\ln N + \frac{1}{2}\mu U_\parallel^2 + \psi\right) \vec j_N\cn\psi_p
-%+ z \mu\tau NU_\parallel^2 \mathcal K_{\vn\times\bhat}(\psi_p) \nonumber\\
-%&+ z \tau NU_\parallel
-% \left( A_\parallel \mathcal
-% K_{\vn\times\bhat}(\psi_p) + \frac{1}{B}[\psi_p, A_\parallel]_\perp\right)
-%\label{eq:energy_flux}
-%\end{align}
-%The relevant terms in the output file are
-%\begin{longtable}{ll}
-%\toprule
-%\rowcolor{gray!50}\textbf{Name} &  \textbf{Equation}\\
-%\midrule
-%    nelnne &$ z_e\tau_e n_e \ln n_e$ \\
-%    nilnni &$ z_i\tau_i N_i \ln N_i$ \\
-%    aperp2 &$ (\np A_\parallel)^2/2/\beta$ \\
-%    ue2   &$z_i\mu_i N_i u_E^2 /2$ \\
-%    neue2 &$ z_e\mu_e n_e u_{\parallel,e}^2/2$ \\
-%    niui2 &$ z_i\mu_i N_i U_{\parallel,i}^2/2$ \\
-%    see\_tt & $z_e(\tau_e (1+\ln n_e) + \phi + \frac{1}{2}\mu_e u_{\parallel,e}^2) S_{n_e} $ \\
-%    sei\_tt & $z_i(\tau_i (1+\ln N_i) + \psi + \frac{1}{2}\mu_i U_{\parallel,i}^2) S_{N_i} $ \\
-%    resistivity\_tt &-$\eta_\parallel n_e (U_{\parallel,i}-u_{\parallel,e})(N_iU_{\parallel,i}-n_eu_{\parallel,e})$ \\
-%    jsee\_tt &$z_e(\tau_e \ln n_e + \mu_e u_{\parallel,e}^2/2 + \phi)n_e(\vec u_E + \vec u_C + \vec u_K)\cn \psi_p
-%        + z_e \tau_e n_e u_{\parallel,e}^2 \vec K_{\vn\times\bhat}\cn \psi_p$ \\
-%    jsei\_tt &$z_i(\tau_i \ln N_i + \mu_i U_{\parallel,i}^2/2 + \psi_i)N_i(\vec u_E^i + \vec u_C + \vec u_K)\cn \psi_p
-%        + z_i \tau_i N_i U_{\parallel,i}^2 \vec K_{\vn\times\bhat}\cn \psi_p$ \\
-%    jseea\_tt &$z_e(\tau_e \ln n_e + \mu_e u_{\parallel,e}^2 + \phi)n_e \vec { b}_\perp\cn \psi_p
-%        + z_e \tau_e n_e u_{\parallel,e} \vec{ b}_\perp \cn \psi_p $ \\
-%    jseia\_tt &$z_i(\tau_i \ln N_i + \mu_i U_{\parallel,i}^2 + \psi_i)N_i \vec { b}_\perp\cn \psi_p
-%        + z_i \tau_i N_i U_{\parallel,i} \vec{ b}_\perp \cn \psi_p $ \\
-%    leeperp\_tt &$z_e(\tau_e(1+\ln n_e) + \phi + \mu_eu_{\parallel,e}^2/2) \Lambda_{n_e} + z_e\mu_e n_e u_{\parallel,e} \Lambda_{u_e}$ \\
-%    leiperp\_tt &$z_i(\tau_i(1+\ln N_i) + \psi_i + \mu_iU_{\parallel,i}^2/2) \Lambda_{N_i} + z_i\mu_i N_i U_{\parallel,i} \Lambda_{U_i}$ \\
-%    %leeparallel\_tt & $z_e(\tau_e(1+\ln n_e) + \phi + \mu_eu_{\parallel,e}^2/2) \nu_{N,\parallel} \Delta_\parallel n_e +
-%    %z_e\mu_e n_e u_{\parallel,e} \nu_{\parallel,e} \Delta_\parallel u_{\parallel,e}$ \\
-%    %leiparallel\_tt & $z_i(\tau_i(1+\ln N_i) + \psi_i + \mu_iU_{\parallel,i}^2/2) \nu_{N,\parallel} \Delta_\parallel N_i +
-%    %z_i\mu_i N_i
-%    %U_{\parallel,i} \nu_{\parallel,i} \Delta_\parallel U_{\parallel,i}$ \\
-%    leeparallel\_tt & $ z_e\mu_e u_{\parallel,e} \nu_{\parallel,e} \Delta_\parallel u_{\parallel,e}$ \\
-%    leiparallel\_tt & $ z_i\mu_i U_{\parallel,i} \nu_{\parallel,i} \Delta_\parallel U_{\parallel,i}$ \\
-%    divjeepar\_tt &$ z_e\nc \left( (\tau_e(1+\ln n_e) + \phi + \mu_eu_{\parallel,e}^2/2) n_eu_{\parallel,e}\bhat\right)$ \\
-%    divjeipar\_tt &$ z_i\nc \left( (\tau_i(1+\ln N_i) + \psi + \mu_iU_{\parallel,i}^2/2) N_iU_{\parallel,i}\bhat\right)$ \\
-%\bottomrule
-%\end{longtable}
 
 %..................................................................
 \bibliography{../common/references}

@@ -236,7 +236,7 @@ int main( int argc, char* argv[])
         err = dg::file::define_dimensions( ncid, dim_ids, &tvarID, grid_out,
                         {"time", "y", "x"});
 
-        std::map<std::string, int> id1d, id3d;
+        std::map<std::string, int> id3d;
         for( auto s : p.species)
         {
             for( auto& record : impurities::diagnostics2d_s_list)
@@ -247,14 +247,6 @@ int main( int argc, char* argv[])
                 DG_RANK0 err = nc_def_var( ncid, name.data(), NC_DOUBLE, 3, dim_ids,
                         &id3d.at(name));
                 DG_RANK0 err = nc_put_att_text( ncid, id3d.at(name), "long_name",
-                        long_name.size(), long_name.data());
-                // and the 1d fields (our idea is to just volume integrate the 2d fields
-                name += "_1d";
-                long_name += " (Volume integrated)";
-                id1d[name] = 0;
-                DG_RANK0 err = nc_def_var( ncid, name.data(), NC_DOUBLE, 1, &dim_ids[0],
-                    &id1d.at(name));
-                DG_RANK0 err = nc_put_att_text( ncid, id1d.at(name), "long_name",
                         long_name.size(), long_name.data());
             }
         }
@@ -289,9 +281,6 @@ int main( int argc, char* argv[])
                 // note that all processes call this function (for MPI)
                 dg::file::put_vara_double( ncid, id3d.at(record.name+"_"+s), start,
                         grid_out, transferH);
-                // For the 1d output only the master thread needs to call the function
-                DG_RANK0 err = nc_put_vara_double( ncid, id1d.at(record.name+"_"+s+"_1d"),
-                        &start, &count, &result);
             }
         }
         DG_RANK0 err = nc_put_vara_double( ncid, tvarID, &start, &count, &time);
@@ -330,14 +319,10 @@ int main( int argc, char* argv[])
                 for( auto& record : impurities::diagnostics2d_s_list)
                 {
                     record.function( resultD, var, s);
-                    double result = dg::blas1::dot( volume, resultD);
                     dg::assign( resultD, resultH);
                     dg::blas2::gemv( projection, resultH, transferH);
                     dg::file::put_vara_double( ncid, id3d.at(record.name+"_"+s),
                                               start, grid_out, transferH);
-                    DG_RANK0 err = nc_put_vara_double( ncid,
-                            id1d.at(record.name+"_"+s+"_1d"), &start, &count,
-                            &result);
                 }
             }
             DG_RANK0 err = nc_close( ncid);
