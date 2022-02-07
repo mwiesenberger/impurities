@@ -275,7 +275,6 @@ int main( int argc, char* argv[])
             for( auto& record : impurities::diagnostics2d_s_list)
             {
                 record.function( resultD, var, s);
-                double result = dg::blas1::dot( volume, resultD);
                 dg::assign( resultD, resultH);
                 dg::blas2::gemv( projection, resultH, transferH);
                 // note that all processes call this function (for MPI)
