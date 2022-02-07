@@ -11,27 +11,52 @@ struct Equations
 {
     using value_type = dg::get_value_type<Container>;
 
+    Equations( ) = default;
     Equations( const Geometry& g, Parameters p);
 
-    const Container& potential(std::string name ) const { return phi.at(name);}
+    const Container& psi(std::string name ) const { return m_psi.at(name);}
+    const Container& potential( ) const { return m_phi;}
 
-    Helmholtz<Geometry, Matrix, Container>& gamma_inv(std::string name) {
-        return m_multi_helm.at(name)[0];
+    dg::Helmholtz<Geometry, Matrix, Container>& gamma_inv(std::string name) {
+        return m_multi_helmN.at(name)[0];
     }
     const std::function<void( const Container&, Container&)>& gamma(std::string
-            name) {return m_inv_helm.at(name);
+            name) {return m_inv_helmN.at(name);
     }
     const Container& uE2() const {return m_UE2;}
-    const Container& real_n( std::string name) const{
-        return m_real_n.at(name);
+    void compute_real_n( std::string s, const Container& n, Container& real_n)
+    {
+        dg::blas1::pointwiseDot( m_binv, m_binv, m_temp);
+        dg::blas1::pointwiseDot( m_p.a.at(s)*m_p.mu.at(s), n, m_temp, 0., m_chi);
+        m_multi_pol[0].set_chi( m_chi);
+        dg::apply( m_multi_pol[0], m_phi, m_omega);
+        // m_multi_pol is negative !
+        dg::blas1::axpbypgz( -1., m_omega, 1., m_gamma_n.at(s), 0., real_n);
+    }
+    void compute_lapPhi( Container& lapP)
+    {
+        m_multi_pol[0].set_chi( 1.);
+        dg::blas2::symv( -1., m_multi_pol[0], m_phi, 0., lapP);
+    }
+    void compute_lapPsi( std::string s, Container& lapP)
+    {
+        m_multi_pol[0].set_chi( 1.);
+        dg::blas2::symv( -1., m_multi_pol[0], m_psi.at(s), 0., lapP);
+    }
+    void compute_lapN( std::string s, const Container& ns,  Container& lapN)
+    {
+        dg::blas2::symv( -1., m_laplacianM.at(s), ns, 0., lapN);
     }
 
 
     void operator()(double t, const std::map<std::string, Container>& y, std::map<std::string, Container>& yp);
+    unsigned ncalls()const {return m_ncalls;}
 
 private:
-    void compute_phi( const std::map<std::string, Container>& y);
-    void compute_psi( const Container& potential);
+    Equations( const Equations& ) = delete; // because of lambdas holding this
+    Equations( Equations&& ) = delete;      // because of lambdas holding this
+    void compute_phi( double t, const std::map<std::string, Container>& y);
+    void compute_psi( double t, const Container& potential);
 
     Container m_binv; //magnetic field
 
@@ -39,133 +64,112 @@ private:
     Container m_tilden, m_temp;
     Container m_phi;
     Container m_dyn, m_dxpsi, m_dypsi;
+    std::array<Container,2> m_v;
     // output relevant quantities
-    Container m_uE2;
-    std::map<std::string,Container> m_psi, m_real_n;
+    Container m_UE2;
+    std::map<std::string,Container> m_psi, m_gamma_n;
+
     std::vector<Container> m_multi_chi;
 
-    dg::NestedGrids<Geometry, Matrix, Container> m_nested_grids;
-    std::vector<Container> m_multi_weights;
+    dg::MultigridCG2d<Geometry, Matrix, Container> m_multigrid;
     std::vector<dg::PCG<Container> > m_multi_pcg;
 
     std::map<std::string, std::vector<dg::Helmholtz<Geometry, Matrix,
-        Container>>> m_multi_helm;
+        Container>>> m_multi_helmN;
+    std::vector<dg::Helmholtz<Geometry, Matrix, Container >> m_multi_helmP;
     std::vector<dg::Elliptic< Geometry, Matrix, Container >> m_multi_pol;
 
-    std::map<std::function <void( const Container&, Container&)>> m_inv_helm;
+    std::map<std::string, std::function <void( const Container&, Container&)>> m_inv_helmN, m_inv_helmP;
     std::function< void( const Container&, Container&)> m_inv_pol;
 
     // initial guess
     dg::Extrapolation<Container> m_extra_phi;
-    std::map<std::string, dg::Extrapolation> m_extra_n, m_extra_psi;
+    std::map<std::string, dg::Extrapolation<Container>> m_extra_n, m_extra_psi;
 
     // derivatives for each species
     std::map<std::string, dg::Elliptic< Geometry, Matrix, Container >> m_laplacianM;
     std::map<std::string, dg::Advection< Geometry, Matrix, Container>> m_adv;
-    std::string, std::array<Matrix,2> m_centered;
+    std::array<Matrix,2> m_centered;
     Parameters m_p;
+    unsigned m_ncalls = 0;
+    Container m_weights;
 };
 
 template< class Geometry, class Matrix, class Container>
 Equations< Geometry, Matrix, Container>::Equations( const Geometry& grid, Parameters p) :
-    m_binv( evaluate( LinearX( p.kappa, 1.), grid)),
-    m_chi( evaluate( dg::zero, grid )), m_omega(chi), m_UE2(chi),
+    m_binv( dg::evaluate( dg::LinearX( p.kappa, 1.), grid)),
+    m_chi( dg::evaluate( dg::zero, grid )), m_omega(m_chi),
     m_tilden(m_chi), m_temp(m_chi),
     m_phi(m_chi),
     m_dyn(m_chi), m_dxpsi(m_chi), m_dypsi(m_chi),
-    m_extra_phi( 2, m_omega)
+    m_v({m_chi,m_chi}), m_UE2(m_chi),
+    m_extra_phi( 2, m_omega),
     m_p(p)
 {
-    m_nested_grids.construct( grid, m_p.num_stages);
-    m_multi_chi = m_nested_girds.project(m_chi);
+    m_weights = dg::create::volume(grid);
+    m_multigrid.construct( grid, m_p.num_stages);
+    m_multi_chi = m_multigrid.project(m_chi);
     for( unsigned u=0; u<m_p.num_stages; u++)
     {
-        m_multi_weights[u] = dg::create::weights( m_nested_grids.grid(u));
-        m_multi_pcg[u].construct( m_multi_chi[u], 10000);
+        m_multi_pcg.push_back({ m_multi_chi[u], 10000});
     }
     for( auto s : m_p.species)
     {
         m_psi[s] = m_chi;
-        m_real_n[s] = m_chi;
+        m_gamma_n[s] = m_chi;
         m_extra_n[s] = m_extra_psi[s] = m_extra_phi;
-        m_laplacianM[s].construct( grid, m_p.bcx[s], m_p.bcy[s], m_p.diff_dir);
-        m_adv[s].construct( grid,  m_p.bcx[s], m_p.bcy[s]);
+        m_laplacianM[s] = { grid, m_p.bcx.at(s), m_p.bcy.at(s), m_p.diff_dir};
+        m_adv[s] = { grid,  m_p.bcx.at(s), m_p.bcy.at(s)};
         // construct inversion for Gamma operators
-        std::vector<std::function<void( const Container&, Container&)> > multi_inv_helm;
         for( unsigned u=0; u<m_p.num_stages; u++)
         {
-            m_multi_helm[s].push_back( m_nested_grids.grid(u), m_p.bcx[s],
-                    m_p.bcy[s], -0.5*m_p.tau[s]*m_p.mu[s], m_p.pol_dir);
-            multi_inv_helm[u] = [
-                    &op = m_multi_helm[s][u],
-                    &pcg = m_multi_pcg[u],
-                    &weights = m_multi_weights[u],
-                    eps = m_p.eps_gamma,
-                    u = u, s = s
-                ] (const auto& y, auto& x)
-                {
-#ifdef MPI_VERSION
-                    int rank;
-                    MPI_Comm_rank( MPI_COMM_WORLD, &rank);
-#endif
-                    unsigned number = 0;
-                    dg::Timer t;
-                    t.tic();
-                    if( u == 0)
-                        number = pcg.solve( op, x, y, 1., weights, eps, 1., 1);
-                    else
-                        number = pcg.solve( op, x, y, 1., weights, eps, 1., 10);
-                    t.toc();
-                    DG_RANK0 std::cout << "# Inverting Helmholtz for species "<<s<<" took "<<number << " iterations in "<<t.diff()<<"s\n";
-                };
+            m_multi_helmN[s].push_back( {m_multigrid.grid(u), m_p.bcx.at(s),
+                    m_p.bcy.at(s), -0.5*m_p.tau.at(s)*m_p.mu.at(s), m_p.pol_dir});
         }
-        if( m_p.mu[s] == 0 || m_p.tau[s] == 0)
-            m_inv_helm[s] = [](const auto& y, auto& x){ dg::blas1::copy( y, x);}
+        if( m_p.mu.at(s) == 0 || m_p.tau.at(s) == 0)
+        {
+            m_inv_helmN[s] = [](const auto& y, auto& x){ dg::blas1::copy( y, x);};
+            m_inv_helmP[s] = [](const auto& y, auto& x){ dg::blas1::copy( y, x);};
+        }
         else
-            m_inv_helm[s] = [&, multi_inv = std::move(multi_inv_helm)]
-                ( const auto& y, auto& x)
+        {
+            m_inv_helmN[s] = [this, s=s, tilde=m_chi] ( const auto& y, auto& x) mutable
             {
-                dg::nested_iterations( m_helm, x, y, multi_inv, nested_grids);
-            }
-    }
-    std::string s = "potential";
-    m_centered = {dg::create::dx( grid, m_p.bcx[s]), dg::create::dy(
-                grid, m_p.bcy[s])};
-    std::vector<std::function<void( const Container&, Container&)> > multi_inv_pol;
-    for( unsigned u=0; u<m_p.num_stages; u++)
-    {
-        m_multi_pol.construct( m_nested_grids.grid(u), m_p.bcx[s], m_p.bcy[s],
-                m_p.pol_dir);
-        multi_inv_pol[u] = [
-                &op = m_multi_pol[u],
-                &pcg = m_multi_pcg[u],
-                &weights = m_multi_weights[u],
-                &eps = m_p.eps_pol[u],
-                u = u
-            ] (const auto& y, auto& x)
-            {
-#ifdef MPI_VERSION
-                int rank;
-                MPI_Comm_rank( MPI_COMM_WORLD, &rank);
-#endif
-                unsigned number = 0;
-                dg::Timer t;
-                t.tic();
-                if( u == 0)
-                    number = pcg.solve( op, x, y, 1., weights, eps, 1., 1);
-                else
-                    number = pcg.solve( op, x, y, 1., weights, eps, 1., 10);
-                t.toc();
-                DG_RANK0 std::cout << "# Inverting Polarisation equation took "<<number << " iterations in "<<t.diff()<<"s\n";
+                m_multigrid.set_benchmark( true, "Gamma N "+s);
+                dg::blas1::copy( y, tilde);
+                if( m_p.bcx.at(s) != dg::PER || m_p.bcy.at(s) != dg::PER)
+                    dg::blas1::plus( tilde, -1.);
+                m_multigrid.solve( m_multi_helmN.at(s), x, tilde, m_p.eps_gamma);
+                if( m_p.bcx.at(s) != dg::PER || m_p.bcy.at(s) != dg::PER)
+                    dg::blas1::plus( x, +1.);
             };
 
+            m_inv_helmP[s] = [this, s=s] ( const auto& y, auto& x)
+            {
+                m_multigrid.set_benchmark( true, "Gamma P "+s);
+                for( unsigned u=0; u<m_p.num_stages; u++)
+                    m_multi_helmP[u].alpha() = -0.5*m_p.tau.at(s)*m_p.mu.at(s);
+                m_multigrid.solve( m_multi_helmP, x, y, m_p.eps_gamma);
+            };
+            //! now we store this as a variable! Delete copy and move!
+        }
     }
-    m_inv_pol = [ &, multi_inv = std::move(multi_inv_pol) ]
-        (const auto& y, auto& x)
+    std::string s = "potential";
+    m_centered = {dg::create::dx( grid, m_p.bcx.at(s)),
+                  dg::create::dy( grid, m_p.bcy.at(s))};
+    for( unsigned u=0; u<m_p.num_stages; u++)
     {
-        dg::nested_iterations( m_multi_pol, x, y, multi_inv, m_nested_grids);
+        m_multi_helmP.push_back( {m_multigrid.grid(u), m_p.bcx.at(s),
+                m_p.bcy.at(s), 0.0, m_p.pol_dir});
+        m_multi_pol.push_back( {m_multigrid.grid(u), m_p.bcx.at(s), m_p.bcy.at(s),
+                m_p.pol_dir});
     }
+    m_inv_pol = [this] (const auto& y, auto& x)
+    {
+        m_multigrid.set_benchmark( true, "Polarisation");
+        m_multigrid.solve( m_multi_pol, x, y, m_p.eps_pol);
 
+    };
 }
 
 
@@ -173,29 +177,29 @@ Equations< Geometry, Matrix, Container>::Equations( const Geometry& grid, Parame
 template< class G, class M, class Container>
 void Equations<G, M, Container>::compute_psi( double t, const Container& potential)
 {
-    m_multi_pol[0].variation(binv, potential, m_UE2); // u_E^2
+    m_multi_pol[0].variation(m_binv, potential, m_UE2); // u_E^2
     for( auto s : m_p.species)
     {
-        m_extra_psi[s].extrapolate( t, m_psi[s]);
-        dg::apply( m_inv_helm[s], potential, m_psi[s]);
-        m_extra_psi[s].update( t, m_psi[s]);
+        m_extra_psi.at(s).extrapolate( t, m_psi.at(s));
+        dg::apply( m_inv_helmP.at(s), potential, m_psi.at(s));
+        m_extra_psi.at(s).update( t, m_psi.at(s));
 
-        dg::blas1::axpby( 1., m_psi[s], -0.5*p.mu[s], m_UE2, m_psi[s]);   //psi  Gamma phi - 0.5 u_E^2
+        dg::blas1::axpby( 1., m_psi.at(s), -0.5*m_p.mu.at(s), m_UE2, m_psi.at(s));
     }
 }
 
 
 template<class G, class Matrix, class Container>
-void Equations<G, Matrix, Container>::compute_phi( double t, const std::vector<Container>& y)
+void Equations<G, Matrix, Container>::compute_phi( double t, const std::map<std::string, Container>& y)
 {
     // Compute chi
     dg::blas1::copy( m_p.epsilon_D, m_chi);
     dg::blas1::pointwiseDot( m_binv, m_binv, m_temp);
     for( auto s : m_p.species)
-        dg::blas1::pointwiseDot( m_p.a[s]*m_p.mu[s], y[s], m_temp, 1., m_chi);
+        dg::blas1::pointwiseDot( m_p.a.at(s)*m_p.mu.at(s), y.at(s), m_temp, 1., m_chi);
 
     // update multi_pol object
-    m_nested_grids.project( m_chi, m_multi_chi);
+    m_multigrid.project( m_chi, m_multi_chi);
     for( unsigned u=0; u<m_p.num_stages; u++)
         m_multi_pol[u].set_chi( m_multi_chi[u]);
 
@@ -204,34 +208,23 @@ void Equations<G, Matrix, Container>::compute_phi( double t, const std::vector<C
     for( auto s : m_p.species)
     {
         // Solve Gamma N
-        m_extra_n[s].extrapolate( t, m_real_n[s]);
-        dg::apply( m_inv_helm[s], y[s], m_real_n[s]);
-        m_extra_n[s].update( t, m_real_n[s]);
-        dg::blas1::axpby( m_p.a[s], m_real_n[s], 1., m_omega);
+        m_extra_n.at(s).extrapolate( t, m_gamma_n.at(s));
+        dg::apply( m_inv_helmN.at(s), y.at(s), m_gamma_n.at(s));
+        m_extra_n.at(s).update( t, m_gamma_n.at(s));
+        dg::blas1::axpby( m_p.a.at(s), m_gamma_n.at(s), 1., m_omega);
     }
 
     // Solve for potential
     m_extra_phi.extrapolate( t, m_phi);
     dg::apply( m_inv_pol, m_omega, m_phi);
-    extra_phi.update( t, m_phi);
-
-    // Compute real_n (for output)
-    // Technically, we only need it every output step but it is more convenient here
-    for( auto s : m_p.species)
-    {
-        dg::blas1::pointwiseDot( m_p.a[s]*m_p.mu[s], y[s], m_temp, 0., m_chi);
-        m_multi_pol[0].set_chi( m_chi);
-        dg::apply( m_multi_pol[0], y[s], m_omega);
-        // m_multi_pol is negative !
-        dg::blas1::axpby( -1., m_omega, 1., m_real_n[s]);
-    }
-
+    m_extra_phi.update( t, m_phi);
 }
 
 template< class G, class M, class Container>
 void Equations< G, M, Container>::operator()(double t, const std::map<std::string, Container>& y, std::map<std::string, Container>& yp)
 {
-    // y[s] == n_s
+    m_ncalls ++;
+    // y.at(s) == n_s
 
     // compute m_phi
     compute_phi( t, y);
@@ -240,28 +233,28 @@ void Equations< G, M, Container>::operator()(double t, const std::map<std::strin
 
     for( auto s : m_p.species)
     {
-        // add advection term
-        dg::blas2::symv( m_centered[0], m_psi[s], m_dxpsi);
-        dg::blas2::symv( m_centered[1], m_psi[s], m_dypsi);
-
         // we need to subtract 1 because dg expects 0 boundary conditions
-        if( m_p.bcx[s] == dg::DIR || m_p.bcy[s] == dg::DIR)
-            dg::blas1::axpby( 1., y[s], -1., 1., m_tilden);
-        else
-            dg::blas1::copy( y[s], m_tilden);
+        dg::blas1::copy( y.at(s), m_tilden);
+        if( m_p.bcx.at(s) != dg::PER || m_p.bcy.at(s) != dg::PER)
+            dg::blas1::plus( m_tilden, -1.);
 
         // ExB + Curv advection with updwind scheme
-        dg::blas1::pointwiseDot( -1., m_binv, m_dypsi, m_v[0]);
-        dg::blas1::pointwiseDot( +1., m_binv, m_dxpsi, m_v[1]);
-        dg::blas1::plus( m_v[1], -m_p.tau[s]*m_p.kappa);
-        m_adv[s].upwind( -1., m_v[0], m_v[1], m_tilden, 0., yp[s]);
+        dg::blas2::symv( m_centered[0], m_psi.at(s), m_dxpsi);
+        dg::blas2::symv( m_centered[1], m_psi.at(s), m_dypsi);
+        dg::blas1::pointwiseDot( -1., m_binv, m_dypsi, 0., m_v[0]);
+        dg::blas1::pointwiseDot( +1., m_binv, m_dxpsi, 0., m_v[1]);
+        dg::blas1::plus( m_v[1], -m_p.tau.at(s)*m_p.kappa);
+        m_adv.at(s).upwind( -1., m_v[0], m_v[1], m_tilden, 0., yp.at(s));
 
         // Div ExB velocity
-        dg::blas1::pointwiseDot( m_p.kappa, y[s], m_dypsi, 1., yp[s]);
+        dg::blas1::pointwiseDot( m_p.kappa, y.at(s), m_dypsi, 1., yp.at(s));
 
         // Add diffusion
-        dg::blas2::gemv( m_laplacianM[s], m_tilden, m_temp);
-        dg::blas2::gemv( -m_p.nu_perp[s], m_laplacianM[s], m_temp, 1., yp[s]);
+        if( m_p.nu_perp.at(s) != 0)
+        {
+            dg::blas2::gemv( m_laplacianM.at(s), m_tilden, m_temp);
+            dg::blas2::gemv( -m_p.nu_perp.at(s), m_laplacianM.at(s), m_temp, 1., yp.at(s));
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 #pragma once
 // diag.h
 #pragma once
-#include "equations.h"
+#include "impurities.h"
 #include "parameters.h"
 
 namespace impurities
@@ -11,7 +11,7 @@ struct Variables
 {
     Equations<dg::x::CartesianGrid2d, dg::x::DMatrix, dg::x::DVec>& rhs;
     const dg::x::CartesianGrid2d& grid;
-    const Parameters& p,
+    const Parameters& p;
     const std::map<std::string, dg::x::DVec>& ns;
 };
 
@@ -46,40 +46,38 @@ std::vector<Record> diagnostics2d_static_list = {
 std::vector<Record> diagnostics2d_s_list = {
     {"n", "Real density in 2d",
         []( dg::x::DVec& result, Variables& v, std::string s) {
-             dg::blas1::copy(v.rhs.real_n(s), result);
+            v.rhs.compute_real_n( s, v.ns.at(s), result);
         }
     },
-    {"psi", "stream function",
+    {"gy", "Gyro-center density in 2d",
         []( dg::x::DVec& result, Variables& v, std::string s) {
-             dg::blas1::copy(v.rhs.potential.at(s), result);
+            dg::blas1::copy(v.ns.at(s), result);
+        }
+    },
+    {"psi", "Gyro-center potential",
+        []( dg::x::DVec& result, Variables& v, std::string s) {
+            dg::blas1::copy(v.rhs.psi(s), result);
+        }
+    },
+    {"vor", "Gyro-center vorticity",
+        []( dg::x::DVec& result, Variables& v, std::string s) {
+            v.rhs.compute_lapPsi( s, result);
         }
     },
     {"S", " a_s tau_s N ln N",
         []( dg::x::DVec& result, Variables& v, std::string s) {
-             double astaus = v.p.a.at(s)*v.p.tau.at(s);
-             dg::blas1::evaluate( result, dg::equals(), [&]DG_DEVICE(
-                         double ns){
-                     return astaus*v.ns.at(s)*ln(v.ns.at(s)); },
-                         v.ns.at(s));
+            double astaus = v.p.a.at(s)*v.p.tau.at(s);
+            dg::blas1::transform( v.ns.at(s), result, dg::LN<double>());
+            dg::blas1::pointwiseDot( astaus, v.ns.at(s), result, 0., result);
         }
     },
     {"U", " 0.5 a_s tau_s N u_E^2",
         []( dg::x::DVec& result, Variables& v, std::string s) {
-             dg::blas1::pointwiseDot( 0.5*v.p.a[s]*v.p.mu.at(s), v.ns[s],
-                     v.eqs.uE2(), 0., result);
+            dg::blas1::pointwiseDot( 0.5*v.p.a.at(s)*v.p.mu.at(s), v.ns.at(s),
+                     v.rhs.uE2(), 0., result);
         }
     }
-
-//        diff_ = -p.nu*blas2::dot( 1., w2d, lapy[0]);
-//        double Gi[3];
-//        Gi[0] = - blas2::dot( 1., w2d, lapy[0]) - blas2::dot( lapy[0], w2d, lny[0]); // minus 
-//        for( unsigned i=1; i<3; i++)
-//            Gi[i] = - p.tau[i]*(blas2::dot( 1., w2d, lapy[i]) + blas2::dot( lapy[i], w2d, lny[i])); // minus 
-//        double Gphi[3];
-//        for( unsigned i=0; i<3; i++)
-//            Gphi[i] = -blas2::dot( phi[i], w2d, lapy[i]);
-//        //std::cout << "ge "<<Ge<<" gi "<<Gi<<" gphi "<<Gphi<<" gpsi "<<Gpsi<<"\n";
-//        ediff_ = p.nu*( Gi[0] - Gphi[0] + p.a[1]*(Gi[1] + Gphi[1]) + p.a[2]*( Gi[2] + Gphi[2]));
+    // Maybe write out diffusion as well (should be really small though...)
 };
 
 

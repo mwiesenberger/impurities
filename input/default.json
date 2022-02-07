@@ -1,0 +1,75 @@
+{
+    "grid" :
+    {
+        "n"  : 5,
+        "Nx" : 60,
+        "Ny" : 60,
+        "x" : [0, 200],
+        "y" : [0, 200]
+    },
+    "elliptic":
+    {
+        "stages" : 3,
+        "eps_pol" : [1e-6, 1, 10],
+        "eps_gamma" : [1e-8, 1, 1],
+        "direction" : "forward"
+    },
+    "curvature" : 0.000457,
+    "potential":
+    {
+        "epsilon_D" : 0,
+        "bc" : ["DIR", "PER"]
+    },
+    "species":
+    [
+        {
+            "name" : "e",
+            "mu" : 0,
+            "tau" : -1,
+            "a" : -1,
+            "nu_perp" : 1e-9,
+            "bc" : ["DIR", "PER"],
+            "init":
+            {
+                "type" : "zero_potential"
+            }
+        },
+        {
+            "name" : "i",
+            "mu" : 1,
+            "tau" : 1.0,
+            "a" : 1,
+            "nu_perp" : 1e-9,
+            "bc" : ["DIR", "PER"],
+            "init":
+            {
+                "type" : "blob",
+                "amplitude" : 0.5,
+                "posX" : 0.5,
+                "posY" : 0.5,
+                "sigma" : 10,
+                "flr" : "gamma_inv"
+            }
+        }
+    ],
+    "timestepper":
+    {
+        "tableau" : "Bogacki-Shampine-4-2-3",
+        "rtol" : 1e-6,
+        "atol" : 1e-10
+    },
+    //"output":
+    //{
+    //    "type" : "glfw",
+    //    "itstp" : 5
+    //}
+    "output":
+    {
+        "type" : "netcdf",
+        "tend" : 1000,
+        "maxout" : 100,
+        "n"  : 3,
+        "Nx" : 100,
+        "Ny" : 100
+    }
+}

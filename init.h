@@ -17,11 +17,11 @@ std::map<std::string, dg::x::DVec> initial_conditions(
         std::string s = p.species[u];
         dg::file::WrappedJsonValue init = js["species"][u]["init"];
         std::string type = init.get("type", "zero").asString();
-        if( "zero" == type)
+        if( "const" == type)
         {
             y0[s] = dg::evaluate( dg::one, grid);
         }
-        else if( "gaussian" == type)
+        else if( "blob" == type)
         {
             double amp, sigma, posX, posY;
             amp = init["amplitude"].asDouble();
@@ -31,10 +31,10 @@ std::map<std::string, dg::x::DVec> initial_conditions(
             double X = p.x[0] + posX*(p.x[1]-p.x[0]);
             double Y = p.y[0] + posY*(p.y[1]-p.y[0]);
 
-            dg::Gaussian gaussian( X, Y, sigma, sigma, p.wall_amp);
+            dg::Gaussian gaussian( X, Y, sigma, sigma, amp);
             dg::DVec temp = dg::evaluate( gaussian, grid);
             y0[s] = temp;
-            if( p.mu[s] != 0)
+            if( p.mu.at(s) != 0 && p.tau.at(s) != 0)
             {
                 std::string flr = init["flr"].asString();
                 if( "none" == flr)
@@ -45,20 +45,21 @@ std::map<std::string, dg::x::DVec> initial_conditions(
                 }
                 else if( "gamma_inv" == flr)
                 {
-                    dg::apply( eq::gamma_inv(s), temp, y0[s]);
+                    dg::apply( eq.gamma_inv(s), temp, y0[s]);
                 }
             }
+            dg::blas1::plus( y0[s], 1.);
         }
         else if( "wall" == type)
         {
-            double wall_pos = js["posX"].asDouble();
-            double wall_amp = js["amplitude"].asDouble();
-            double wall_sigma = js["sigma"].asDouble();
-            double X = p.x[0] + posX*(p.x[1]-p.x[0]);
-            dg::GaussianX wall( X, p.wall_sigma, p.wall_amp);
+            double wall_pos = init["posX"].asDouble();
+            double wall_amp = init["amplitude"].asDouble();
+            double wall_sigma = init["sigma"].asDouble();
+            double X = p.x[0] + wall_pos*(p.x[1]-p.x[0]);
+            dg::GaussianX wall( X, wall_sigma, wall_amp);
             dg::DVec temp = dg::evaluate( wall, grid);
             y0[s] = temp;
-            if( p.mu[s] != 0)
+            if( p.mu.at(s) != 0 && p.tau.at(s) != 0)
             {
                 std::string flr = init["flr"].asString();
                 if( "none" == flr)
@@ -69,19 +70,20 @@ std::map<std::string, dg::x::DVec> initial_conditions(
                 }
                 else if( "gamma_inv" == flr)
                 {
-                    dg::apply( eq::gamma_inv(s), temp, y0[s]);
+                    dg::apply( eq.gamma_inv(s), temp, y0[s]);
                 }
             }
+            dg::blas1::plus( y0[s], 1.);
         }
         else if( "zero_potential" == type)
         {
-            if( p.mu[s] != 0)
-                throw dg::Error( dg::Message(_ping_)<<"init type zero_potential only possible for  mu=0! You gave mu = "<<p.mu[s]<<"\n");
+            if( p.mu.at(s) != 0)
+                throw dg::Error( dg::Message(_ping_)<<"init type zero_potential only possible for  mu=0! You gave mu = "<<p.mu.at(s)<<"\n");
             zero_pot = true;
             zero_pot_species = s;
         }
         else
-            throw dg::Error( dg::Message(_ping_)<<"init type "<<type" not recognized \n");
+            throw dg::Error( dg::Message(_ping_)<<"init type "<<type<<" not recognized \n");
 
 
     }
@@ -94,7 +96,8 @@ std::map<std::string, dg::x::DVec> initial_conditions(
             {
                 dg::x::DVec temp = y0[s];
                 dg::apply( eq.gamma(s), y0[s], temp);
-                dg::blas1::axpby( -p.a[s]/p.a[zero_pot_species], temp, 1., y0[zero_pot_species]);
+                dg::blas1::axpby( -p.a.at(s)/p.a.at(zero_pot_species), temp,
+                        1., y0[zero_pot_species]);
             }
         }
     }

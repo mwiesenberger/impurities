@@ -220,7 +220,7 @@ The parameter $\kappa$ is the curvature given by the input parameter
 "potential" :
 {
     "epsilon_D" : 0.,
-    bc : ["DIR", "PER"]
+    "bc" : ["DIR", "PER"]
 },
 \end{minted}
 
@@ -231,9 +231,9 @@ Each species is defined by an entry in the species list in the input file:
 [
     {
         "name" : "electrons",
-        "mu" : 0.,
-        "tau" : -1.,
-        "a" :  -1.,
+        "mu" : 0,
+        "tau" : -1,
+        "a" :  -1,
         "nu_perp" : 1e-6,
         "init":
         {
@@ -243,8 +243,8 @@ Each species is defined by an entry in the species list in the input file:
     },
     {
         "name" : "ions",
-        "mu" : 1.,
-        "tau" : 0.,
+        "mu" : 1,
+        "tau" : 0,
         "a" :  0.9,
         "nu_perp" : 1e-6,
         "init":
@@ -281,14 +281,14 @@ where $X = x_0 + p_x (x_1 - x_0)$ and $Y= y_0 + p_y( y_1 - y_0)$ are the initial
 radius of the blob.
 \begin{minted}[texcomments]{js}
 {
-    "type" : "gaussian",
+    "type" : "blob",
     "amplitude": 1.0, // $A$ in Eq.\eqref{eq:profile_blob}
     "posX" : 0, // $p_x$ in Eq.\eqref{eq:profile_blob}
     "posY" : 0, // $p_y$ in Eq.\eqref{eq:profile_blob}
     "sigma" : 5.0, // $\sigma$ in Eq.\eqref{eq:profile_blob}
-    "flr" : "none", //only needed for $\mu_s\neq 0$
-    "flr" : "gamma", //only needed for $\mu_s\neq 0$
-    "flr" : "gamma_inv", //only needed for $\mu_s\neq 0$
+    "flr" : "none", //only needed for $\tau_s \mu_s\neq 0$
+    "flr" : "gamma", //only needed for $\tau_s \mu_s\neq 0$
+    "flr" : "gamma_inv", //only needed for $\tau_s \mu_s\neq 0$
 }
 \end{minted}
 \subsubsection{Wall}
@@ -307,9 +307,9 @@ radius of the wall.
     "amplitude": 1.0, // $A$ in Eq.\eqref{eq:profile_wall}
     "posX" : 0, // $p_x$ in Eq.\eqref{eq:profile_wall}
     "sigma" : 5.0, // $\sigma$ in Eq.\eqref{eq:profile_wall}
-    "flr" : "none", //only needed for $\mu_s\neq 0$
-    "flr" : "gamma", //only needed for $\mu_s\neq 0$
-    "flr" : "gamma_inv", //only needed for $\mu_s\neq 0$
+    "flr" : "none", //only needed for $\tau_s \mu_s\neq 0$
+    "flr" : "gamma", //only needed for $\tau_s \mu_s\neq 0$
+    "flr" : "gamma_inv", //only needed for $\tau_s \mu_s\neq 0$
 }
 \end{minted}
 
@@ -427,14 +427,13 @@ This can be controlled via
     // Use glfw to display results in a window while computing (requires to
     // compile with the glfw3 library)
     "type"  : "glfw"
-    "itstp"  : 4, // The number of steps between outputs of 2d fields
+    "itstp"  : 4, // The number of steps between refreshing field plots
 
     // Use netcdf to write results into a file (filename given on command line)
     // (see next section for information about what is written in there)
     "type"  : "netcdf"
-    "itstp"  : 4,    // The number of steps between outputs of 2d fields
-    "maxout"  : 500, // The total number of field outputs. The endtime is
-    // T=itstp*maxout*dt
+    "tend"  : 4,    // The number of steps between outputs of 2d fields
+    "maxout"  : 100, // The total number of field outputs
     "n"  : 3 , // The number of polynomial coefficients in the output file
     "Nx" : 48, // Number of cells in x in the output file
     "Ny" : 48  // Number of cells in y in the output file
@@ -457,10 +456,9 @@ xc               & Dataset & 2 (y,x) & Cartesian x-coordinate  \\
 yc               & Dataset & 2 (y,x) & Cartesian y-coordinate \\
 X                & Dataset & 3 (time, y, x) & 2d outputs \\
 X\_1d            & Dataset & 1 (time) & 1d volume integrals $\int \dV X$ \\
-time\_per\_step  & Dataset & 1 (time) & Average computation time for one step \\
 \bottomrule
 \end{longtable}
-The output fields X are determined in the file \texttt{feltor/src/reco2D/diag.h}.
+The output fields X are determined in the file \texttt{impurities/diag.h}.
 %where
 %X and Y\_tt represent the quantities described in the tables in this section starting with the quantities
 %\begin{longtable}{llll}

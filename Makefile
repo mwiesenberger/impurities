@@ -10,18 +10,18 @@ include $(FELTOR_PATH)/config/devices/devices.mk
 INCLUDE+=-I$(FELTOR_PATH)/inc/
 
 
-all: impurities toefl_hpc
+all: impurities impurities_hpc impurities_mpi
 
-impurities: impurities.cpp impurities.h
-	$(CC) $(OPT) $(CFLAGS) $< -o $@ $(INCLUDE) $(GLFLAGS) $(JSONLIB) -DDG_BENCHMARK -g
+impurities: impurities.cpp impurities.h init.h parameters.h diag.h
+	$(CC) $(OPT) $(CFLAGS) $< -o $@ $(INCLUDE) $(GLFLAGS) $(LIBS) $(JSONLIB) $(VERSION_FLAGS) -DWITH_GLFW -g
 
-impurities_hpc: impurities.cpp impurities.h
-	$(CC) $(OPT) $(CFLAGS) $< -o $@ $(INCLUDE) $(LIBS) $(JSONLIB)  -DDG_BENCHMARK -g
+impurities_hpc: impurities.cpp impurities.h init.h parameters.h diag.h
+	$(CC) $(OPT) $(CFLAGS) $< -o $@ $(INCLUDE) $(LIBS) $(JSONLIB) $(VERSION_FLAGS) -g
 
-impurities_mpi: impurities.cpp impurities.h
-	$(MPICC) $(OPT) $(MPICFLAGS) $< -o $@ $(INCLUDE) $(LIBS) $(JSONLIB) -DDG_BENCHMARK
+impurities_mpi: impurities.cpp impurities.h init.h parameters.h diag.h
+	$(MPICC) $(OPT) $(MPICFLAGS) $< -o $@ $(INCLUDE) $(LIBS) $(JSONLIB) $(VERSION_FLAGS)
 
 .PHONY: clean
 
 clean:
-	rm -f impurities impuriies_hpc impurities_mpi
+	rm -f impurities impurities_hpc impurities_mpi
