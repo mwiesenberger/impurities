@@ -1,7 +1,11 @@
-impurties.aux
-impurties.log
-impurties.pdf
-impurties.toc
+impurities.aux
+impurities.out
+impurities.log
+impurities.pdf
+impurities.toc
+.ipynb_checkpoints
+_minted-impurities
+*.nc
 impurities
 impurities_hpc
 impurities_mpi
