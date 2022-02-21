@@ -187,9 +187,8 @@ and the position of the maximum density \( \vec{X}_{max}(t)\).
 Input file format: \href{https://en.wikipedia.org/wiki/JSON}{json}
 %%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Spatial grid} \label{sec:spatial}
-We define the simulation box as
-The spatial grid is an equidistant discretization of the 2D Cartesian
-product-space
+The spatial grid is an equidistant discontinuous Galerkin discretization of the
+2D Cartesian product-space
 $[ x_0, x_1]\times [y_0, y_1]$,
 We use an equal number of Gaussian nodes in $x$ and $y$.
 \begin{minted}[texcomments]{js}
@@ -222,7 +221,7 @@ one accuracy can be set (they typically are quite fast to solve):
     // $\eps_0 = \eps_{pol,0}$, $\eps_i = \eps_{pol,i} \eps_{pol,0}$  for $i>1$.
     // Tuning those factors is a major performance tuning oppourtunity!!
     // For saturated turbulence the suggested values are [1e-6, 2000, 100].
-    "eps_gamma" : 1e-10, // Accuracy requirement of Gamma operator
+    "eps_gamma" : [1e-10,1,1] // Accuracy requirement of Gamma operator
     "direction" : "forward", // Direction of the Laplacian: forward or centered
 }
 \end{minted}
@@ -360,85 +359,6 @@ We use an adaptive explicit embedded Runge Kutta timestepper to advance the equa
 }
 \end{minted}
 
-
-
-%\section{Structure of output file}
-%Output file format: netcdf-4/hdf5
-%%
-%%Name | Type | Dimensionality | Description
-%%---|---|---|---|
-%\begin{longtable}{lll>{\RaggedRight}p{7cm}}
-%\toprule
-%\rowcolor{gray!50}\textbf{Name} &  \textbf{Type} & \textbf{Dimension} & \textbf{Description}  \\ \midrule
-%inputfile  &             text attribute & 1 & verbose input file as a string \\
-%energy\_time             & Dataset & 1 & timesteps at which 1d variables are written \\
-%time                     & Dataset & 1 & time at which fields are written \\
-%x                        & Dataset & 1 & x-coordinate  \\
-%y                        & Dataset & 1 & y-coordinate \\
-%electrons                & Dataset & 3 (time, y, x) & electon density $n$ \\
-%ions                     & Dataset & 3 (time, y, x) & ion density $N$ or vorticity density $\rho$  \\
-%potential                & Dataset & 3 (time, y, x) & electric potential $\phi$  \\
-%vorticity                & Dataset & 3 (time, y, x) & Laplacian of potential $\nabla^2\phi$  \\
-%dEdt                     & Dataset & 1 (energy\_time) & change of energy per time  \\
-%dissipation              & Dataset & 1 (energy\_time) & diffusion integrals  \\
-%energy                   & Dataset & 1 (energy\_time) & total energy integral  \\
-%mass                     & Dataset & 1 (energy\_time) & mass integral   \\
-%\bottomrule
-%\end{longtable}
-%\section{Diagnostics toeflRdiag.cu}
-%There only is a shared memory version available
-%\begin{verbatim}
-%cd path/to/feltor/diag
-%make toeflRdiag
-%path/to/feltor/diag/toeflRdiag input.nc output.nc
-%\end{verbatim}
-%
-%Input file format: netcdf-4/hdf5
-%%
-%%Name | Type | Dimensionality | Description
-%%---|---|---|---|
-%\begin{longtable}{lll>{\RaggedRight}p{7cm}}
-%\toprule
-%\rowcolor{gray!50}\textbf{Name} &  \textbf{Type} & \textbf{Dimension} & \textbf{Description}  \\ \midrule
-%inputfile  &             text attribute & 1 & verbose input file as a string \\
-%electrons                & Dataset & 3 & electon density (time, y, x) \\
-%ions                     & Dataset & 3 & ion density (time, y, x) \\
-%potential                & Dataset & 3 & electric potential (time, y, x) \\
-%\bottomrule
-%\end{longtable}
-%
-%Output file format: netcdf-4/hdf5
-%%
-%%Name | Type | Dimensionality | Description
-%%---|---|---|---|
-%\begin{longtable}{lll>{\RaggedRight}p{7cm}}
-%\toprule
-%\rowcolor{gray!50}\textbf{Name} &  \textbf{Type} & \textbf{Dimension} & \textbf{Description}  \\ \midrule
-% inputfile & text attribute & 1 & copy of inputfile attribute of the input file (the json string of the simulation input file) \\
-% time & Dataset & 1 & the time steps at which variables are written \\
-% posX & Dataset & 1 (time) & centre of mass (COM) position x-coordinate \\
-% posY & Dataset & 1 (time) &COM y-position \\
-% velX & Dataset & 1 (time)& COM x-velocity \\
-% velY & Dataset & 1 (time)& COM y-velocity \\
-% accX & Dataset & 1 (time)& COM x-acceleration \\
-% accY & Dataset & 1 (time)& COM y-acceleration \\
-% velCOM & Dataset & 1 (time)&absolute value of the COM velocity \\
-% posXmax& Dataset & 1 (time)&maximum amplitude x-position \\
-% posYmax& Dataset & 1 (time)&maximum amplitude y-position \\
-% velXmax& Dataset & 1 (time)&maximum amplitude x-velocity \\
-% velYmax& Dataset & 1 (time)&maximum amplitude y-velocity \\
-% maxamp & Dataset & 1 (time)&value of the maximum amplitude  \\
-%  compactness\_ne& Dataset & 1 (time) &compactness of the density field \\
-% Ue& Dataset&  1 (time) &entropy electrons \\
-% Ui &Dataset& 1 (time) & entropy ions \\
-% Uphi& Dataset& 1 (time) &  exb energy \\
-% mass& Dataset & 1 (time) & mass of the blob without background \\
-%\bottomrule
-%\end{longtable}
-%
-%
-%
-%
 \section{Output}
 Our program can either write results directly to screen using the glfw library
 or write results to disc using netcdf.

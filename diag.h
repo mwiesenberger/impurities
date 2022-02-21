@@ -71,7 +71,7 @@ std::vector<Record> diagnostics2d_s_list = {
             dg::blas1::pointwiseDot( astaus, v.ns.at(s), result, 0., result);
         }
     },
-    {"U", " 0.5 a_s tau_s N u_E^2",
+    {"U", " 0.5 a_s mu_s N u_E^2",
         []( dg::x::DVec& result, Variables& v, std::string s) {
             dg::blas1::pointwiseDot( 0.5*v.p.a.at(s)*v.p.mu.at(s), v.ns.at(s),
                      v.rhs.uE2(), 0., result);
