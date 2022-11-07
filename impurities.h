@@ -138,7 +138,10 @@ Equations< Geometry, Matrix, Container>::Equations( const Geometry& grid, Parame
                 m_multigrid.set_benchmark( true, "Gamma N "+s);
                 dg::blas1::copy( y, tilde);
                 if( m_p.bcx.at(s) != dg::PER || m_p.bcy.at(s) != dg::PER)
+                {
                     dg::blas1::plus( tilde, -1.);
+                    dg::blas1::plus( x, -1.);
+                }
                 m_multigrid.solve( m_multi_helmN.at(s), x, tilde, m_p.eps_gamma);
                 if( m_p.bcx.at(s) != dg::PER || m_p.bcy.at(s) != dg::PER)
                     dg::blas1::plus( x, +1.);
