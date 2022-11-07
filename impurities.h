@@ -123,8 +123,8 @@ Equations< Geometry, Matrix, Container>::Equations( const Geometry& grid, Parame
         // construct inversion for Gamma operators
         for( unsigned u=0; u<m_p.num_stages; u++)
         {
-            m_multi_helmN[s].push_back( {m_multigrid.grid(u), m_p.bcx.at(s),
-                    m_p.bcy.at(s), -0.5*m_p.tau.at(s)*m_p.mu.at(s), m_p.pol_dir});
+            m_multi_helmN[s].push_back({ -0.5*m_p.tau.at(s)*m_p.mu.at(s), {m_multigrid.grid(u), m_p.bcx.at(s),
+                    m_p.bcy.at(s), m_p.pol_dir}});
         }
         if( m_p.mu.at(s) == 0 || m_p.tau.at(s) == 0)
         {
@@ -159,8 +159,8 @@ Equations< Geometry, Matrix, Container>::Equations( const Geometry& grid, Parame
                   dg::create::dy( grid, m_p.bcy.at(s))};
     for( unsigned u=0; u<m_p.num_stages; u++)
     {
-        m_multi_helmP.push_back( {m_multigrid.grid(u), m_p.bcx.at(s),
-                m_p.bcy.at(s), 0.0, m_p.pol_dir});
+        m_multi_helmP.push_back( {0., {m_multigrid.grid(u), m_p.bcx.at(s),
+                m_p.bcy.at(s), m_p.pol_dir}});
         m_multi_pol.push_back( {m_multigrid.grid(u), m_p.bcx.at(s), m_p.bcy.at(s),
                 m_p.pol_dir});
     }
