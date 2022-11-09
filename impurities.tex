@@ -353,9 +353,20 @@ We use an adaptive explicit embedded Runge Kutta timestepper to advance the equa
 \begin{minted}[texcomments]{js}
 "timestepper":
 {
+    "type" : "adaptive",
     "tableau" : "Bogacki-Shampine-4-2-3",
     "rtol" : 1e-5,
-    "atol" : 1e-6
+    "atol" : 1e-6,
+    "reject-limit" : 2 // default 2 is usually good enough
+}
+\end{minted}
+Another possibility is an explicit Multistep method
+\begin{minted}[texcomments]{js}
+"timestepper":
+{
+    "type" : "multistep",
+    "tableau" : "TVB-3-3",
+    "dt" : 1
 }
 \end{minted}
 
@@ -369,12 +380,12 @@ This can be controlled via
     // Use glfw to display results in a window while computing (requires to
     // compile with the glfw3 library)
     "type"  : "glfw"
-    "itstp"  : 4, // The number of steps between refreshing field plots
+    "deltaT"  : 4, // The time interval where the plot is updated
 
     // Use netcdf to write results into a file (filename given on command line)
     // (see next section for information about what is written in there)
     "type"  : "netcdf"
-    "tend"  : 4,    // The number of steps between outputs of 2d fields
+    "tend"  : 4,    // The end time of the simulation
     "maxout"  : 100, // The total number of field outputs
     "n"  : 3 , // The number of polynomial coefficients in the output file
     "Nx" : 48, // Number of cells in x in the output file

@@ -26,6 +26,7 @@ struct Parameters
 
     std::vector<std::string> species;
     unsigned num_species;
+    std::string timestepper, tableau;
 
     Parameters(){}
 
@@ -38,6 +39,9 @@ struct Parameters
         n  = js["grid"].get("n",3).asUInt();
         Nx = js["grid"].get("Nx", 100).asUInt();
         Ny = js["grid"].get("Ny", 100).asUInt();
+
+        timestepper = js["timestepper"].get("type", "multistep").asString();
+        tableau     = js["timestepper"].get("tableau", "TVB-3-3").asString();
 
         num_stages = js["elliptic"]["stages"].asUInt();
         eps_pol.resize(num_stages);

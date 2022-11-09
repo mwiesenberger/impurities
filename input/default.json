@@ -10,7 +10,7 @@
     "elliptic":
     {
         "stages" : 3,
-        "eps_pol" : [1e-6, 1, 10],
+        "eps_pol" : [1e-6, 0.5, 0.5],
         "eps_gamma" : [1e-8, 1, 1],
         "direction" : "forward"
     },
@@ -54,14 +54,16 @@
     ],
     "timestepper":
     {
+        "type" : "adaptive",
         "tableau" : "Bogacki-Shampine-4-2-3",
         "rtol" : 1e-6,
-        "atol" : 1e-10
+        "atol" : 1e-10,
+        "reject-limit" : 2
     },
     //"output":
     //{
     //    "type" : "glfw",
-    //    "itstp" : 5
+    //    "deltaT" : 5
     //}
     "output":
     {

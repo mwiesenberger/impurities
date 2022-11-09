@@ -224,15 +224,22 @@ void Equations<G, Matrix, Container>::compute_phi( double t, const std::map<std:
 }
 
 template< class G, class M, class Container>
-void Equations< G, M, Container>::operator()(double t, const std::map<std::string, Container>& y, std::map<std::string, Container>& yp)
+void Equations< G, M, Container>::operator()(double time, const std::map<std::string, Container>& y, std::map<std::string, Container>& yp)
 {
     m_ncalls ++;
     // y.at(s) == n_s
+    dg::Timer t;
+    t.tic();
+
 
     // compute m_phi
-    compute_phi( t, y);
+    compute_phi( time, y);
     // compute all m_psi
-    compute_psi( t, m_phi);
+    compute_psi( time, m_phi);
+    t.toc();
+    std::cout << "# Computing  phi and psi took [s] "<<t.diff()<<"\n";
+    t.tic();
+
 
     for( auto s : m_p.species)
     {
@@ -259,6 +266,8 @@ void Equations< G, M, Container>::operator()(double t, const std::map<std::strin
             dg::blas2::gemv( -m_p.nu_perp.at(s), m_laplacianM.at(s), m_temp, 1., yp.at(s));
         }
     }
+    t.toc();
+    std::cout << "# Computing rhs [s] took "<<t.diff()<<"\n";
 }
 
 }//namespace impurities

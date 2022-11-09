@@ -62,24 +62,38 @@ int main( int argc, char* argv[])
         DG_RANK0 std::cerr << error.what() << std::endl;
         dg::abort_program();
     }
-    // Construct timestepper
-    std::string tableau;
-    double rtol, atol, time = 0.;
-    try{
-        rtol = js["timestepper"].get("rtol", 1e-5).asDouble();
-        atol = js["timestepper"].get("atol", 1e-5).asDouble();
-        tableau = js[ "timestepper"].get( "tableau",
-                "Bogacki-Shampine-4-2-3").asString();
-    }catch ( std::exception& error){
-        DG_RANK0 std::cerr << "Error in input file " << argv[1]<< std::endl;
-        DG_RANK0 std::cerr << error.what() << std::endl;
+    using Vector = std::map<std::string, dg::x::DVec>;
+    ///////////////////////////////////////////////////////////////////////////
+    DG_RANK0 std::cout<< "Construct timeloop ...\n";
+    dg::ExplicitMultistep< Vector> multistep;
+    dg::Adaptive< dg::ERKStep< Vector>> adapt;
+    auto timeloop = std::unique_ptr<dg::aTimeloop<Vector>>();
+    double rtol = 0., atol = 0., reject_limit = 2;
+    double time = 0.;
+    if( p.timestepper == "multistep")
+    {
+        multistep = { p.tableau, y0};
+        double dt = js[ "timestepper"]["dt"].asDouble( 0.01);
+        timeloop = std::make_unique<dg::MultistepTimeloop<Vector>>( multistep,
+            rhs, time, y0, dt);
+    }
+    else if (p.timestepper == "adaptive")
+    {
+        adapt = {p.tableau, y0};
+        //adapt.stepper().ignore_fsal();
+        rtol = js[ "timestepper"][ "rtol"].asDouble( 1e-7);
+        atol = js[ "timestepper"][ "atol"].asDouble( 1e-10);
+        reject_limit = js["timestepper"].get("reject-limit", 2).asDouble();
+        timeloop = std::make_unique<dg::AdaptiveTimeloop<Vector>>( adapt,
+            rhs, dg::pid_control, dg::l2norm, rtol, atol, reject_limit);
+    }
+    else
+    {
+        DG_RANK0 std::cerr << "Error: Unrecognized timestepper: '"
+                           << p.timestepper << "'! Exit now!\n";
         dg::abort_program();
     }
-    DG_RANK0 std::cout<< "Construct timeloop ...\n";
-    using Vec = std::map<std::string, dg::x::DVec>;
-    dg::Adaptive< dg::ERKStep< Vec>> adapt(tableau, y0);
-    dg::AdaptiveTimeloop<Vec> timeloop( adapt, rhs,
-                        dg::pid_control, dg::l2norm, rtol, atol);
+    DG_RANK0 std::cout << "Done!\n";
 
     ////////////////////////////////////////////////////////////////////
 
@@ -97,7 +111,6 @@ int main( int argc, char* argv[])
 #ifdef WITH_GLFW
     if( "glfw" == output)
     {
-        double dt = 1e-5;
         /////////glfw initialisation ////////////////////////////////////////////
         dg::file::WrappedJsonValue ws;
         dg::file::file2Json( "window_params.json", ws.asJson(),
@@ -120,7 +133,7 @@ int main( int argc, char* argv[])
         }
         v2d["Phi / "] = &rhs.potential();
         v2d["Vor / "] = &rhs.potential();
-        unsigned itstp = js["output"]["itstp"].asUInt();
+        double deltaT = js["output"].get("deltaT", 10).asDouble();
         unsigned step = 0;
 
         while ( !glfwWindowShouldClose( w ))
@@ -155,26 +168,20 @@ int main( int argc, char* argv[])
             //step
             dg::Timer ti;
             ti.tic();
-            std::cout << "\n\t dt "<<dt;
-            for( unsigned i=0; i<itstp; i++)
-            {
-                try{
-                    adapt.step( rhs, time, y0, time, y0, dt, dg::pid_control,
-                            dg::l2norm, rtol, atol);
-                }
-                catch( std::exception& fail) {
-                    std::cerr << "ERROR in Timestepper\n";
-                    std::cerr << fail.what() << std::endl;
-                    std::cerr << "Does Simulation respect CFL condition?\n";
-                    glfwSetWindowShouldClose( w, GL_TRUE);
-                    break;
-                }
-                step++;
+            try{
+                timeloop->integrate( time, y0, time + deltaT, y0, dg::to::exact);
+            }
+            catch( std::exception& fail) {
+                std::cerr << "ERROR in Timestepper\n";
+                std::cerr << fail.what() << std::endl;
+                std::cerr << "Does Simulation respect CFL condition?\n";
+                glfwSetWindowShouldClose( w, GL_TRUE);
+                break;
             }
             ti.toc();
             std::cout << "\n\t Step "<<step;
-            std::cout << "\n\t dt "<<dt;
-            std::cout << "\n\t Average time for one step: "<<ti.diff()/(double)itstp<<"s\n\n";
+            std::cout << "\n\t dt "<<timeloop->get_dt();
+            std::cout << "\n\t Total time between outputs: "<<ti.diff()<<"s\n\n";
         }
         glfwTerminate();
     }
@@ -294,7 +301,7 @@ int main( int argc, char* argv[])
             dg::Timer ti;
             ti.tic();
             try{
-                timeloop.integrate( time, y0, u*deltaT, y0,
+                timeloop->integrate( time, y0, u*deltaT, y0,
                                   u < maxout ? dg::to::at_least : dg::to::exact);
             }catch ( std::exception& fail)
             {
@@ -306,7 +313,7 @@ int main( int argc, char* argv[])
             unsigned delta_ncalls = rhs.ncalls() - ncalls;
             ncalls = rhs.ncalls();
             ti.toc();
-            DG_RANK0 std::cout << "\n\t Time "<<time <<" of "<<Tend <<" with current timestep "<<timeloop.get_dt();
+            DG_RANK0 std::cout << "\n\t Time "<<time <<" of "<<Tend <<" with current timestep "<<timeloop->get_dt();
             DG_RANK0 std::cout << "\n\t # of rhs calls since last output "<<delta_ncalls;
             DG_RANK0 std::cout << "\n\t Average time for one step: "<<ti.diff()/(double)delta_ncalls<<"s\n\n"<<std::flush;
             start = u;
