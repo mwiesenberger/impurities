@@ -15,6 +15,6 @@ module list
 echo "$@"
 
 # $@ forwards all arguments
-impurities_hpc "$@"
+./impurities_hpc "$@"
 
 date

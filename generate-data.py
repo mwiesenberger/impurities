@@ -101,8 +101,8 @@ m = simplesim.Manager( directory="vmax", executable="./submit_job.sh", filetype=
 tau = (0,0)
 #for aa in (1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 1e-1, 2e-1, 5e-1):
 #    for mumu in ( 2, 2.5, 5, 10, 20):
-for aa in (1e-3):
-    for mumu in ( 2):
+for aa in [1e-3]:
+    for mumu in [ 2]:
         a = ( 1-aa, aa)
         mu = ( 1, mumu)
         vmax = 0.77*np.sqrt( amplitude*sigma*kappa*(1+a[0]*tau[0]+a[1]*tau[1])/(a[0]*mu[0]+a[1]*mu[1]) )
