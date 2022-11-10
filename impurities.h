@@ -178,23 +178,40 @@ Equations< Geometry, Matrix, Container>::Equations( const Geometry& grid, Parame
 
 //idx is impurity species one or two
 template< class G, class M, class Container>
-void Equations<G, M, Container>::compute_psi( double t, const Container& potential)
+void Equations<G, M, Container>::compute_psi( double time, const Container& potential)
 {
+#ifdef WITH_MPI
+    int rank;
+    MPI_Comm_rank( MPI_COMM_WORLD, &rank);
+#endif //WITH_MPI
+    dg::Timer t;
+    t.tic();
     m_multi_pol[0].variation(m_binv, potential, m_UE2); // u_E^2
     for( auto s : m_p.species)
     {
-        m_extra_psi.at(s).extrapolate( t, m_psi.at(s));
+        m_extra_psi.at(s).extrapolate( time, m_psi.at(s));
         dg::apply( m_inv_helmP.at(s), potential, m_psi.at(s));
-        m_extra_psi.at(s).update( t, m_psi.at(s));
+        m_extra_psi.at(s).update( time, m_psi.at(s));
 
         dg::blas1::axpby( 1., m_psi.at(s), -0.5*m_p.mu.at(s), m_UE2, m_psi.at(s));
+        t.toc();
+        DG_RANK0 std::cout << "    psi"<<s<<": "<<t.diff()<<"\n";
+        t.tic();
     }
+    t.toc();
 }
 
 
 template<class G, class Matrix, class Container>
-void Equations<G, Matrix, Container>::compute_phi( double t, const std::map<std::string, Container>& y)
+void Equations<G, Matrix, Container>::compute_phi( double time, const std::map<std::string, Container>& y)
 {
+#ifdef WITH_MPI
+    int rank;
+    MPI_Comm_rank( MPI_COMM_WORLD, &rank);
+#endif //WITH_MPI
+    double acc_pol = 0.;
+    dg::Timer t;
+    t.tic();
     // Compute chi
     dg::blas1::copy( m_p.epsilon_D, m_chi);
     dg::blas1::pointwiseDot( m_binv, m_binv, m_temp);
@@ -205,29 +222,47 @@ void Equations<G, Matrix, Container>::compute_phi( double t, const std::map<std:
     m_multigrid.project( m_chi, m_multi_chi);
     for( unsigned u=0; u<m_p.num_stages; u++)
         m_multi_pol[u].set_chi( m_multi_chi[u]);
+    t.toc();
+    acc_pol += t.diff();
 
+    t.tic();
     //Compute rhs: \sum_s a_s Gamma_s N_s
     dg::blas1::copy( 0., m_omega);
     for( auto s : m_p.species)
     {
         // Solve Gamma N
-        m_extra_n.at(s).extrapolate( t, m_gamma_n.at(s));
+        m_extra_n.at(s).extrapolate( time, m_gamma_n.at(s));
         dg::apply( m_inv_helmN.at(s), y.at(s), m_gamma_n.at(s));
-        m_extra_n.at(s).update( t, m_gamma_n.at(s));
+        m_extra_n.at(s).update( time, m_gamma_n.at(s));
         dg::blas1::axpby( m_p.a.at(s), m_gamma_n.at(s), 1., m_omega);
+        t.toc();
+        DG_RANK0 std::cout << "    gammaN"<<s<<": "<<t.diff()<<"\n";
+        t.tic();
     }
 
     // Solve for potential
-    m_extra_phi.extrapolate( t, m_phi);
+    m_extra_phi.extrapolate( time, m_phi);
     dg::apply( m_inv_pol, m_omega, m_phi);
-    m_extra_phi.update( t, m_phi);
+    m_extra_phi.update( time, m_phi);
+    t.toc();
+    acc_pol += t.diff();
+    DG_RANK0 std::cout << "    pol: "<<acc_pol<<"\n";
 }
 
 template< class G, class M, class Container>
 void Equations< G, M, Container>::operator()(double time, const std::map<std::string, Container>& y, std::map<std::string, Container>& yp)
 {
+#ifdef WITH_MPI
+    int rank;
+    MPI_Comm_rank( MPI_COMM_WORLD, &rank);
+#endif //WITH_MPI
+    dg::Timer total;
+    total.tic();
     m_ncalls ++;
     // y.at(s) == n_s
+
+    // We create yaml formatted performance output
+    DG_RANK0 std::cout << "-   time: "<<time<<"\n";
     dg::Timer t;
     t.tic();
 
@@ -237,7 +272,7 @@ void Equations< G, M, Container>::operator()(double time, const std::map<std::st
     // compute all m_psi
     compute_psi( time, m_phi);
     t.toc();
-    std::cout << "# Computing  phi and psi took [s] "<<t.diff()<<"\n";
+    DG_RANK0 std::cout << "# Computing  phi and psi took [s] "<<t.diff()<<"\n";
     t.tic();
 
 
@@ -265,9 +300,13 @@ void Equations< G, M, Container>::operator()(double time, const std::map<std::st
             dg::blas2::gemv( m_laplacianM.at(s), m_tilden, m_temp);
             dg::blas2::gemv( -m_p.nu_perp.at(s), m_laplacianM.at(s), m_temp, 1., yp.at(s));
         }
+        t.toc();
+        DG_RANK0 std::cout << "    rhs"<<s<<": "<<t.diff()<<"\n";
+        t.tic();
     }
     t.toc();
-    std::cout << "# Computing rhs [s] took "<<t.diff()<<"\n";
+    total.toc();
+    DG_RANK0 std::cout << "    total: "<<total.diff()<<"\n";
 }
 
 }//namespace impurities

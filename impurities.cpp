@@ -40,8 +40,19 @@ int main( int argc, char* argv[])
         DG_RANK0 std::cerr << e.what()<<std::endl;
         dg::abort_program();
     }
-    DG_RANK0 std::cout << js.asJson() << std::endl;
-    DG_RANK0 p.display(std::cout);
+    // We have to comment out json file in yaml
+    std::stringstream ss;
+    ss << js.asJson();
+    char c;
+    std::cout<<'#';
+    while ( ss.get(c))
+    {
+        if( c == '\n')
+            DG_RANK0 std::cout << "\n#";
+        else
+            DG_RANK0 std::cout << c;
+    }
+    DG_RANK0 std::cout << std::endl;
 
     //Construct grid
     dg::x::CartesianGrid2d grid( p.x[0], p.x[1], p.y[0], p.y[1], p.n, p.Nx, p.Ny,
@@ -50,10 +61,10 @@ int main( int argc, char* argv[])
         , comm
         #endif //WITH_MPI
         );
-    DG_RANK0 std::cout<< "Construct equations ...\n";
+    DG_RANK0 std::cout<< "# Construct equations ...\n";
     impurities::Equations<dg::x::CartesianGrid2d, dg::x::DMatrix, dg::x::DVec>
         rhs{ grid, p};
-    DG_RANK0 std::cout<< "Construct initial condition ...\n";
+    DG_RANK0 std::cout<< "# Construct initial condition ...\n";
     std::map<std::string, dg::x::DVec> y0;
     try{
         y0 = impurities::initial_conditions(grid, rhs, p, js);
@@ -64,7 +75,7 @@ int main( int argc, char* argv[])
     }
     using Vector = std::map<std::string, dg::x::DVec>;
     ///////////////////////////////////////////////////////////////////////////
-    DG_RANK0 std::cout<< "Construct timeloop ...\n";
+    DG_RANK0 std::cout<< "# Construct timeloop ...\n";
     dg::ExplicitMultistep< Vector> multistep;
     dg::Adaptive< dg::ERKStep< Vector>> adapt;
     auto timeloop = std::unique_ptr<dg::aTimeloop<Vector>>();
@@ -93,21 +104,23 @@ int main( int argc, char* argv[])
                            << p.timestepper << "'! Exit now!\n";
         dg::abort_program();
     }
-    DG_RANK0 std::cout << "Done!\n";
+    DG_RANK0 std::cout << "# Done!\n";
 
     ////////////////////////////////////////////////////////////////////
 
+    dg::Timer t;
+    double output_time = 0.;
+    DG_RANK0 std::cout << "timeloop:\n";
+    t.tic();
     impurities::Variables var = { rhs, grid, p, y0};
     // trigger first computation of potential
     {
-        DG_RANK0 std::cout<< "First potential\n";
+        DG_RANK0 std::cout<< "# First potential\n";
         auto temp = y0;
         rhs( 0., y0, temp);
-        DG_RANK0 std::cout<< "Done\n";
+        DG_RANK0 std::cout<< "# Done\n";
     }
     std::string output = js[ "output"]["type"].asString("glfw");
-    dg::Timer t;
-    t.tic();
 #ifdef WITH_GLFW
     if( "glfw" == output)
     {
@@ -179,15 +192,17 @@ int main( int argc, char* argv[])
                 break;
             }
             ti.toc();
-            std::cout << "\n\t Step "<<step;
-            std::cout << "\n\t dt "<<timeloop->get_dt();
-            std::cout << "\n\t Total time between outputs: "<<ti.diff()<<"s\n\n";
+            DG_RANK0 std::cout << "\n#\t Step "<<step;
+            DG_RANK0 std::cout << "\n#\t dt "<<timeloop->get_dt();
+            DG_RANK0 std::cout << "\n#\t Total time between outputs: "<<ti.diff()<<"s\n\n";
         }
         glfwTerminate();
     }
 #endif //WITH_GLFW
     if( "netcdf" == output)
     {
+        dg::Timer to;
+        to.tic();
         std::string outputfile;
         if( argc == 1 || argc == 2)
             outputfile = "impurities.nc";
@@ -291,6 +306,8 @@ int main( int argc, char* argv[])
         }
         DG_RANK0 err = nc_put_vara_double( ncid, tvarID, &start, &count, &time);
         DG_RANK0 err = nc_close( ncid);
+        to.toc();
+        output_time += to.diff();
         double Tend = js["output"].get("tend", 1.0).asDouble();
         unsigned maxout = js["output"].get("maxout", 10).asUInt();
         double deltaT = Tend/(double)maxout;
@@ -313,9 +330,10 @@ int main( int argc, char* argv[])
             unsigned delta_ncalls = rhs.ncalls() - ncalls;
             ncalls = rhs.ncalls();
             ti.toc();
-            DG_RANK0 std::cout << "\n\t Time "<<time <<" of "<<Tend <<" with current timestep "<<timeloop->get_dt();
-            DG_RANK0 std::cout << "\n\t # of rhs calls since last output "<<delta_ncalls;
-            DG_RANK0 std::cout << "\n\t Average time for one step: "<<ti.diff()/(double)delta_ncalls<<"s\n\n"<<std::flush;
+            DG_RANK0 std::cout << "\n#\t Time "<<time <<" of "<<Tend <<" with current timestep "<<timeloop->get_dt();
+            DG_RANK0 std::cout << "\n#\t # of rhs calls since last output "<<delta_ncalls;
+            DG_RANK0 std::cout << "\n#\t Average time for one step: "<<ti.diff()/(double)delta_ncalls<<"s\n\n"<<std::flush;
+            ti.tic();
             start = u;
             DG_RANK0 err = nc_open(outputfile.c_str(), NC_WRITE, &ncid);
             // First write the time variable
@@ -332,6 +350,9 @@ int main( int argc, char* argv[])
                 }
             }
             DG_RANK0 err = nc_close( ncid);
+            ti.toc();
+            output_time += ti.diff();
+
             if( abort) break;
         }
     }
@@ -350,12 +371,15 @@ int main( int argc, char* argv[])
     }
     ////////////////////////////////////////////////////////////////////
     t.toc();
+    DG_RANK0 std::cout << "total-time: "<<t.diff()<<"\n";
+    DG_RANK0 std::cout << "output-time: "<<output_time<<"\n";
+    DG_RANK0 std::cout << "ncalls: "<<rhs.ncalls()<<"\n";
     unsigned hour = (unsigned)floor(t.diff()/3600);
     unsigned minute = (unsigned)floor( (t.diff() - hour*3600)/60);
     double second = t.diff() - hour*3600 - minute*60;
     DG_RANK0 std::cout << std::fixed << std::setprecision(2) <<std::setfill('0');
-    DG_RANK0 std::cout <<"Computation Time \t"<<hour<<":"<<std::setw(2)<<minute<<":"<<second<<" for "<<rhs.ncalls()<<"\n";
-    DG_RANK0 std::cout <<"which is         \t"<<t.diff()/rhs.ncalls()<<"s/rhs call\n";
+    DG_RANK0 std::cout <<"#Computation Time \t"<<hour<<":"<<std::setw(2)<<minute<<":"<<second<<" for "<<rhs.ncalls()<<"\n";
+    DG_RANK0 std::cout <<"#which is         \t"<<t.diff()/rhs.ncalls()<<"s/rhs call\n";
 
 #ifdef WITH_MPI
     MPI_Finalize();

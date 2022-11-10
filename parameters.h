@@ -83,38 +83,5 @@ struct Parameters
             throw dg::Error( dg::Message(_ping_)<<" The sum of a`s is not zero but "<<suma<<"\n");
     }
 
-    void display( std::ostream& os = std::cout ) const
-    {
-        os << "Physical parameters are: \n"
-            <<"    Curvature_y:     = "<<kappa<<"\n";
-        os << "Number of species "<<num_species<<"\n";
-        for( unsigned u=0; u<num_species; u++)
-        {
-            std::string s = species[u];
-            os <<"     name_"<<s<<"  = "<<s<<"\n"
-               <<"        a_"<<s<<"  = "<<a.at(s)<<"\n"
-               <<"       mu_"<<s<<"  = "<<mu.at(s)<<"\n"
-               <<"      tau_"<<s<<"  = "<<tau.at(s)<<"\n"
-               <<"       nu_"<<s<<"  = "<<nu_perp.at(s)<<"\n"
-               <<"      bcx_"<<s<<"  = "<<dg::bc2str(bcx.at(s))<<"\n"
-               <<"      bcy_"<<s<<"  = "<<dg::bc2str(bcy.at(s))<<"\n";
-        }
-        os << "Potential\n"
-           <<"      eps_D= "<<epsilon_D<<"\n"
-           <<"      bcx  = "<<dg::bc2str(bcx.at("potential"))<<"\n"
-           <<"      bcy  = "<<dg::bc2str(bcy.at("potential"))<<"\n";
-
-        os << "Boundary parameters are: \n"
-            <<"    x = "<<x[0]<<" x "<<x[1]<<"\n"
-            <<"    y = "<<y[0]<<" x "<<y[1]<<"\n";
-        os << "Algorithmic parameters are: \n"
-            <<"    n  = "<<n<<"\n"
-            <<"    Nx = "<<Nx<<"\n"
-            <<"    Ny = "<<Ny<<"\n";
-        os << "Stopping for CG:         "<<eps_pol[0]<<"\n"
-           << "    stages =             "<<num_stages<<"\n"
-            <<"Stopping for Gamma CG:   "<<eps_gamma[0]<<std::endl;
-        //the endl is for the implicit flush
-    }
 };
 }//namespace imp
