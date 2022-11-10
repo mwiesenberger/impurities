@@ -112,7 +112,12 @@ int main( int argc, char* argv[])
     double output_time = 0.;
     DG_RANK0 std::cout << "timeloop:\n";
     t.tic();
-    impurities::Variables var = { rhs, grid, p, y0};
+    impurities::Variables var = { rhs, p, y0,
+        dg::evaluate( dg::cooX2d, grid),
+        dg::evaluate( dg::cooY2d, grid),
+        dg::create::weights( grid),
+        dg::create::weights( grid)
+    };
     // trigger first computation of potential
     {
         DG_RANK0 std::cout<< "# First potential\n";
@@ -253,14 +258,28 @@ int main( int argc, char* argv[])
                     #endif //WITH_MPI
                     );
         dg::x::IHMatrix projection = dg::create::interpolation( grid_out, grid);
-        int dim_ids[3], tvarID;
+        int dim_ids[3], tvarID, diag_dim_id, diag_tvarID;
         // the dimensions are the ones of grid_out!
-        err = dg::file::define_dimensions( ncid, dim_ids, &tvarID, grid_out,
-                        {"time", "y", "x"});
+        DG_RANK0 err = dg::file::define_dimensions( ncid, dim_ids, &tvarID,
+                grid_out, {"time", "y", "x"});
+        DG_RANK0 err = dg::file::define_time( ncid, "diag_time", &diag_dim_id,
+                &diag_tvarID);
 
-        std::map<std::string, int> id3d;
+
+        std::map<std::string, int> id1d, id3d;
         for( auto s : p.species)
         {
+            for( auto& record : impurities::diagnostics1d_s_list)
+            {
+                std::string name = record.name + "_"+s;
+                std::string long_name = record.long_name + " for species " + s;
+                id1d[name] = 0;
+                DG_RANK0 err = nc_def_var( ncid, name.data(), NC_DOUBLE, 1,
+                        &diag_dim_id, &id1d.at(name));
+                DG_RANK0 err = nc_put_att_text( ncid, id1d.at(name), "long_name",
+                        long_name.size(), long_name.data());
+
+            }
             for( auto& record : impurities::diagnostics2d_s_list)
             {
                 std::string name = record.name + "_"+s;
@@ -274,23 +293,23 @@ int main( int argc, char* argv[])
         }
         dg::x::HVec resultH = dg::evaluate( dg::zero, grid);
         dg::x::HVec transferH = dg::evaluate( dg::zero, grid_out);
-        dg::x::DVec resultD = transferH; // transfer to device
+        dg::x::DVec resultD = resultH; // transfer to device
         for( auto& record : impurities::diagnostics2d_static_list)
         {
             std::string name = record.name;
             std::string long_name = record.long_name;
             int staticID = 0;
-            DG_RANK0 err = nc_def_var( ncid, name.data(), NC_DOUBLE, 2, &dim_ids[1],
-                &staticID);
+            DG_RANK0 err = nc_def_var( ncid, name.data(), NC_DOUBLE, 2,
+                    &dim_ids[1], &staticID);
             DG_RANK0 err = nc_put_att_text( ncid, staticID, "long_name",
-                                           long_name.size(), long_name.data());
-            record.function( resultD, var, "");
-            dg::assign( resultD, resultH);
-            dg::blas2::gemv( projection, resultH, transferH);
+                    long_name.size(), long_name.data());
+            record.function( transferH, var, grid_out);
+            // NEVER PROJECT STATIC OUTPUT
+            //dg::blas2::gemv( projection, resultH, transferH);
             dg::file::put_var_double( ncid, staticID, grid_out, transferH);
         }
         dg::x::DVec volume = dg::create::volume( grid);
-        size_t start = {0};
+        size_t start = {0}, diag_start = {0};
         size_t count = {1};
         for( auto s : p.species)
         {
@@ -303,29 +322,60 @@ int main( int argc, char* argv[])
                 dg::file::put_vara_double( ncid, id3d.at(record.name+"_"+s), start,
                         grid_out, transferH);
             }
+            for( auto& record : impurities::diagnostics1d_s_list)
+            {
+                double result = record.function( var, s);
+                DG_RANK0 err = nc_put_vara_double( ncid,
+                        id1d.at(record.name+"_"+s), &diag_start, &count,
+                        &result);
+            }
         }
         DG_RANK0 err = nc_put_vara_double( ncid, tvarID, &start, &count, &time);
+        DG_RANK0 err = nc_put_vara_double( ncid, diag_tvarID, &diag_start,
+                &count, &time);
         DG_RANK0 err = nc_close( ncid);
         to.toc();
         output_time += to.diff();
         double Tend = js["output"].get("tend", 1.0).asDouble();
         unsigned maxout = js["output"].get("maxout", 10).asUInt();
-        double deltaT = Tend/(double)maxout;
+        unsigned itstp = js["output"].get("itstp", 10).asUInt();
+        double deltaT = Tend/(double)(maxout*itstp);
         bool abort = false;
         unsigned ncalls = rhs.ncalls();
         for( unsigned u=1; u<=maxout; u++)
         {
             dg::Timer ti;
             ti.tic();
-            try{
-                timeloop->integrate( time, y0, u*deltaT, y0,
-                                  u < maxout ? dg::to::at_least : dg::to::exact);
-            }catch ( std::exception& fail)
+            for( unsigned v=1; v<=itstp; v++)
             {
-                DG_RANK0 std::cerr << "ERROR in Timestepper\n";
-                DG_RANK0 std::cerr << fail.what() << std::endl;
-                DG_RANK0 std::cerr << "Writing last output and exit ..."<<std::endl;
-                abort = true;
+                try{
+                    timeloop->integrate( time, y0, ((u-1)*itstp+v)*deltaT, y0,
+                              v < itstp ? dg::to::at_least : dg::to::exact);
+                }catch ( std::exception& fail)
+                {
+                    DG_RANK0 std::cerr << "ERROR in Timestepper\n";
+                    DG_RANK0 std::cerr << fail.what() << std::endl;
+                    DG_RANK0 std::cerr << "Writing last output and exit ..."<<std::endl;
+                    abort = true;
+                }
+                to.tic();
+                DG_RANK0 err = nc_open(outputfile.c_str(), NC_WRITE, &ncid);
+                diag_start = (u-1)*itstp+v;
+                for( auto s : p.species)
+                {
+                    for( auto& record : impurities::diagnostics1d_s_list)
+                    {
+                        double result = record.function( var, s);
+                        DG_RANK0 err = nc_put_vara_double( ncid,
+                                id1d.at(record.name+"_"+s), &diag_start, &count,
+                                &result);
+                    }
+                }
+                DG_RANK0 err = nc_put_vara_double( ncid, diag_tvarID,
+                        &diag_start, &count, &time);
+                DG_RANK0 err = nc_close( ncid);
+                to.toc();
+                output_time += to.diff();
             }
             unsigned delta_ncalls = rhs.ncalls() - ncalls;
             ncalls = rhs.ncalls();
