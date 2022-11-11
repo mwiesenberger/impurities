@@ -1,4 +1,4 @@
-import inputfile
+import common
 import simplesimdb as simplesim
 import numpy as np
 import json
@@ -7,7 +7,7 @@ kappa = 0.000457
 amplitude = 1
 sigma = 10
 
-inputfile = inputfile.generate_default( kappa, amplitude, sigma)
+inputfile = common.generate_default( kappa, amplitude, sigma)
 
 m = simplesim.Manager( directory="vmax", executable="./submit_job.sh", filetype="nc")
 
