@@ -9,7 +9,7 @@ sigma = 10
 inputfile={
     "grid" :
     {
-        "n"  : 3,
+        "n"  : 4,
         "Nx" : 512,
         "Ny" : 512,
         "x" : [0, 500],
@@ -19,8 +19,9 @@ inputfile={
     {
         "type" : "netcdf",
         "tend" : 1500,
-        "maxout" : 100,
-        "n"  : 3,
+        "maxout" : 10,
+        "itstp": 30,
+        "n"  : 4,
         "Nx" : 256,
         "Ny" : 256
     },
@@ -111,10 +112,15 @@ for aa in (1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 1e-1, 2e-1, 5e-1):
         inputfile["species"][2]["mu"] = mu[1]
         inputfile["species"][1]["a"] = a[0]
         inputfile["species"][2]["a"] = a[1]
-        inputfile["output"]["tend"] = 1.5*sigma/vmax/0.2
+        inputfile["output"]["tend"] = 2*sigma/vmax/0.2
 
         print ( a[1], mu[1], vmax, sigma/vmax/0.2);
         m.create( inputfile, error="display")
+
+
+############################################
+print( "Figure 4")
+m = simplesim.Manager( directory="caseA", executable="./submit_job.sh", filetype="nc")
 
 # Figure 4
 aa = 0.01
@@ -130,14 +136,13 @@ inputfile["species"][1]["a"] = a[0]
 inputfile["species"][2]["a"] = a[1]
 inputfile["species"][1]["tau"] = tau[0]
 inputfile["species"][2]["tau"] = tau[1]
-inputfile["output"]["tend"] = 1.5*sigma/vmax/0.2
+inputfile["output"]["tend"] = 2*sigma/vmax/0.2
 
 print ( a[1], mu[1], vmax, sigma/vmax/0.2);
 m.create( inputfile, error="display")
-
-
+############################################
 print( "Simulation case A")
-m = simplesim.Manager( directory="caseA", executable="./submit_job.sh", filetype="nc")
+
 aa = 0.001
 mumu = 2
 a = ( 1-aa, aa)
@@ -151,7 +156,7 @@ inputfile["species"][1]["a"] = a[0]
 inputfile["species"][2]["a"] = a[1]
 inputfile["species"][1]["tau"] = tau[0]
 inputfile["species"][2]["tau"] = tau[1]
-inputfile["output"]["tend"] = 1.5*sigma/vmax/0.2
+inputfile["output"]["tend"] = 2*sigma/vmax/0.2
 inputfile["species"][1]["init"] ={ 
     "type" : "blob",
     "amplitude" : 1.0,
@@ -170,6 +175,7 @@ inputfile["species"][2]["init"] ={
 print ( a[1], mu[1], vmax, sigma/vmax/0.2);
 m.create( inputfile, error="display")
 
+############################################
 print( "Simulation case B")
 m = simplesim.Manager( directory="caseB", executable="./submit_job.sh", filetype="nc")
 aa = 0.1
@@ -185,7 +191,7 @@ inputfile["species"][1]["a"] = a[0]
 inputfile["species"][2]["a"] = a[1]
 inputfile["species"][1]["tau"] = tau[0]
 inputfile["species"][2]["tau"] = tau[1]
-inputfile["output"]["tend"] = 1.5*sigma/vmax/0.2
+inputfile["output"]["tend"] = 2*sigma/vmax/0.2
 inputfile["species"][1]["init"] ={ 
     "type" : "blob",
     "amplitude" : 1.0,
@@ -204,6 +210,7 @@ inputfile["species"][2]["init"] ={
 print ( a[1], mu[1], vmax, sigma/vmax/0.2);
 m.create( inputfile, error="display")
 
+############################################
 print( "Simulation case C")
 m = simplesim.Manager( directory="caseC", executable="./submit_job.sh", filetype="nc")
 tau = (0,0)
@@ -219,7 +226,7 @@ for aa in (0, 0.03, 0.075, 0.1, 0.15, 0.2):
         inputfile["species"][2]["a"] = a[1]
         inputfile["species"][1]["tau"] = tau[0]
         inputfile["species"][2]["tau"] = tau[1]
-        inputfile["output"]["tend"] = 1.5*sigma/vmax/0.2
+        inputfile["output"]["tend"] = 2*sigma/vmax/0.2
         inputfile["species"][1]["init"] ={ 
             "type" : "blob",
             "amplitude" : 1.0,
