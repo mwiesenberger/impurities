@@ -25,6 +25,8 @@ for aa in (1e-3, 2e-3, 5e-3, 1e-2, 2e-2, 5e-2, 1e-1, 2e-1, 5e-1):
         inputfile["species"][1]["a"] = a[0]
         inputfile["species"][2]["a"] = a[1]
         inputfile["output"]["tend"] = 2*sigma/vmax/0.2
+        for i in [0,1,2]:
+            inputfile["species"][i]["nu_perp"] = np.sqrt((1+tau[1])*sigma**3*kappa*amplitude/2e9)
 
         print ( a[1], mu[1], vmax, sigma/vmax/0.2);
         m.create( inputfile, error="display")
@@ -49,6 +51,8 @@ inputfile["species"][2]["a"] = a[1]
 inputfile["species"][1]["tau"] = tau[0]
 inputfile["species"][2]["tau"] = tau[1]
 inputfile["output"]["tend"] = 2*sigma/vmax/0.2
+for i in [0,1,2]:
+    inputfile["species"][i]["nu_perp"] = np.sqrt((1+tau[1])*sigma**3*kappa*amplitude/2e9)
 
 print ( a[1], mu[1], vmax, sigma/vmax/0.2);
 m.create( inputfile, error="display")
@@ -84,6 +88,8 @@ inputfile["species"][2]["init"] ={
     "sigma" : 10.,
     "flr" : "gamma_inv"
 }
+for i in [0,1,2]:
+    inputfile["species"][i]["nu_perp"] = np.sqrt((1+tau[1])*sigma**3*kappa*5.0/2e9)
 print ( a[1], mu[1], vmax, sigma/vmax/0.2);
 m.create( inputfile, error="display")
 
@@ -119,6 +125,8 @@ inputfile["species"][2]["init"] ={
     "sigma" : 10.,
     "flr" : "gamma_inv"
 }
+for i in [0,1,2]:
+    inputfile["species"][i]["nu_perp"] = np.sqrt((1+tau[1])*sigma**3*kappa*5.0/2e9)
 print ( a[1], mu[1], vmax, sigma/vmax/0.2);
 m.create( inputfile, error="display")
 
@@ -154,6 +162,8 @@ for aa in (0, 0.03, 0.075, 0.1, 0.15, 0.2):
             "sigma" : 10.,
             "flr" : "gamma_inv"
         }
+        for i in [0,1,2]:
+            inputfile["species"][i]["nu_perp"] = np.sqrt((1+tau[1])*sigma**3*kappa*5.0/2e9)
         print ( a[1], mu[1], vmax, sigma/vmax/0.2);
         m.create( inputfile, error="display")
 
